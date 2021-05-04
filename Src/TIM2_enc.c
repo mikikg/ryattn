@@ -1,7 +1,3 @@
-#include <stdbool.h>
-#include "stm32f1xx.h"
-#include "TIM2_enc.h"
-
 //---------------------------------
 // Konfiguracija za TIM2 da radi u Encoder Modu
 // Koristi se:
@@ -9,16 +5,49 @@
 //	PA0 kao Encoder A input
 //	PA1 kao Encoder B input
 // 	PA2 za Button input
-//	
 //
 
-volatile int32_t MyData[10];
+#include <stdbool.h>
+#include "stm32f1xx.h"
+#include "TIM2_enc.h"
+
+#define Button GPIOA->IDR & GPIO_IDR_IDR2
+
+volatile uint16_t MyData[20];
+volatile uint16_t MyDataLimHI[20] = {
+        0, //
+        0,  //
+        100,  // OVERLAP
+        255, // DELAY
+        255, // SLOPE
+        3, // QEIMODE
+        2000, // IMPSSTEP
+        1, // ENABLEIR
+        5*60, // SSAVER
+};
+volatile uint16_t MyDataLimLO[20] = {
+        0, //
+        0,  //
+        0,  // OVERLAP
+        0, // DELAY
+        0, // SLOPE
+        2, // QEIMODE
+        1, // IMPSSTEP
+        0, // ENABLEIR
+        0, // SSAVER
+};
 
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;
-
+volatile bool mute_active = 0;
+volatile bool change_flag = 0;
+volatile int ENC_IMPS_PER_STEP = 200;
+volatile int ENC_IMPS_PER_STEP_HALF;
 extern volatile uint32_t SW_timers[4];
+extern volatile uint32_t SW_timers_enable[4];
+
 void TIM2_Setup_GPIO (void) {
+
     //ukljuci clock za TIM4
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 
@@ -44,12 +73,29 @@ void TIM2_Setup_GPIO (void) {
     GPIOA->CRL |=  GPIO_CRL_CNF2_1; //setuj bit
     GPIOA->CRL &= ~GPIO_CRL_MODE2_0; //ocisti bit
     GPIOA->CRL &= ~GPIO_CRL_MODE2_1; //ocisti bit
-    GPIOA->BSRR =  GPIO_BSRR_BR2; //BS0=1=pull-up, BR0=0=pull-down
+    //GPIOA->BSRR =  GPIO_BSRR_BR2; //BS0=1=pull-up, BR0=0=pull-down
+
+    //Button Input preko interapta ------------------------
+    //Konfigurisi EXTI2 za PAx (podrazumeva se PA2)
+    AFIO->EXTICR[0] |= AFIO_EXTICR1_EXTI2_PA;
+
+    //unmaskiraj EXTI2
+    EXTI->IMR |= EXTI_IMR_MR2;
+
+    //podesi da se aktivira interupt na obe ivice
+    //rastuca=EXTI_RTSR, padajuca=EXTI_FTSR
+    EXTI->RTSR |= EXTI_RTSR_TR2;
+    EXTI->FTSR |= EXTI_FTSR_TR2;
+
+    //Enable NVIC EXTI interrupt za PA2, on je na EXTI2
+    NVIC_EnableIRQ(EXTI2_IRQn); //enable channel
+    //NVIC_SetPriority(EXTI2_IRQn, 1); //interupt priority
 
 }
 void TIM2_Setup_ENC (void) {
 
     TIM2_Setup_GPIO();
+    ENC_IMPS_PER_STEP_HALF = ENC_IMPS_PER_STEP / 2; //init values
 
 	//konfiguracija za TIM2 kao enkoder
 	TIM2->ARR 	= ENC_IMPS_PER_STEP; //auto reload vrednost 200
@@ -67,11 +113,13 @@ void TIM2_Setup_ENC (void) {
 
 	//Enable TIM interrupt
 	NVIC_EnableIRQ(TIM2_IRQn); //enable channel
-	NVIC_SetPriority(TIM2_IRQn, 1); //interupt priority
+	//NVIC_SetPriority(TIM2_IRQn, 1); //interupt priority
 
 	//run
 	TIM2->CR1		|= TIM_CR1_CEN; //ENABLE tim periferial
 }
+
+#define SELMENU MyData[MENU]+1
 
 //---------- TIM2 IRQ -----------------
 void TIM2_IRQHandler (void){	
@@ -81,53 +129,43 @@ void TIM2_IRQHandler (void){
             TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
             if (menu_active) {
                 if (!edit_active) {
-                    MyData[MENU] --;
+                    if (MyData[MENU] > 0) MyData[MENU] --;
                 } else {
-                    MyData[MyData[MENU]+1] ++;
+                    if (MyData[SELMENU] < MyDataLimHI[SELMENU]) {
+                        MyData[SELMENU]++; //increment data
+                        change_flag = 1;
+                    }
                 }
             } else {
-                MyData[VOLUME] ++;
+                if (!mute_active && MyData[VOLUME] > 0) MyData[VOLUME] --;
             }
 		} else {
             TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
             if (menu_active) {
                 if (!edit_active) {
-                    MyData[MENU] ++;
+                    if (MyData[MENU] < 11) MyData[MENU] ++;
                 } else {
-                    MyData[MyData[MENU]+1] --;
+                    if (MyData[SELMENU] > MyDataLimLO[SELMENU]) {
+                        MyData[SELMENU] --; //decrement data
+                        change_flag = 1;
+                    }
                 }
             } else {
-                MyData[VOLUME] --;
+                if (!mute_active && MyData[VOLUME] < 64) MyData[VOLUME] ++;
             }
 		}
-
-        //Limiti
-        if (MyData[VOLUME] > 0 ) MyData[VOLUME] = 0;
-        if (MyData[VOLUME] < -64 ) MyData[VOLUME] = -64;
-
-        if (MyData[MENU] > 9 ) MyData[MENU] = 9;
-        if (MyData[MENU] < 0 ) MyData[MENU] = 0;
-
-        if (MyData[OVERLAP] > 100 ) MyData[OVERLAP] = 100;
-        if (MyData[OVERLAP] < 0 ) MyData[OVERLAP] = 0;
-
-        if (MyData[DELAY] > 255 ) MyData[DELAY] = 255;
-        if (MyData[DELAY] < 0 ) MyData[DELAY] = 0;
-
-        if (MyData[SLOPE] > 255 ) MyData[SLOPE] = 255;
-        if (MyData[SLOPE] < 0 ) MyData[SLOPE] = 0;
-
-        if (MyData[QEIMODE] > 3 ) MyData[QEIMODE] = 3;
-        if (MyData[QEIMODE] < 2 ) MyData[QEIMODE] = 2;
-
-        if (MyData[IMPSSTEP] > 2000 ) MyData[IMPSSTEP] = 2000;
-        if (MyData[IMPSSTEP] < 1 ) MyData[IMPSSTEP] = 1;
 
         TIM2->SR &=~ TIM_SR_UIF;//clear flag
 
         //reset timer for last update
         SW_timers[2] = 0;
-
     }
 }
 
+//---------- EXTI PA2 BUTTON interrupt -----------------
+void EXTI2_IRQHandler (void){ //button padajuca ivica ...
+    if (EXTI->PR & EXTI_PR_PR2) { //jel pending od kanala 2?
+        SW_timers_enable[0] = Button ? 1 : 0;
+        EXTI->PR |= EXTI_PR_PR2; //flag se cisti tako sto se upise 1
+    }
+}

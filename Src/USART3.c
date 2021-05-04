@@ -20,13 +20,9 @@ volatile uint16_t UART_KBD_cntx;
 volatile uint16_t UART_KBD_RX_packet_len;
 volatile uint32_t GLOBAL_DIAG[10];
 
-
-
 //extern volatile uint8_t UART_485_pass_trough_flag;
 //extern volatile uint8_t UART_485_TX_buff [MAX_485_TX_STRLEN+1]; // this will hold the string to transmit
-
 //volatile uint32_t GLOABAL_DIAG[10];
-
 //#define RECEIVED_BYTE 1
 
 void USART3_init (void) {

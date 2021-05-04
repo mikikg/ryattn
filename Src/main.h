@@ -6,24 +6,23 @@
 #define MYPRJ_MAIN_H
 
 #include "stm32f1xx.h"
-#include "SPI2.h"
-
-#include "USART3.h"
 
 void MYSYS_init(void) {
     /***********    ----    Clock Setup     -----   ***********/
-    //  HSE -> PLL -> SYSCLK
+    //  HSI -> PLL -> SYSCLK
     //  8MHz    *9    72MHz
     //
-    RCC->CR |= (1 << 16);            // Enable HSE
-    while(!(RCC->CR & (1 << 17)));   // Wait till HSE ready
-    RCC->CFGR |= 1;                  // Swich to HSE temporarly
-    RCC->CR   &= ~1;                 // Disable HSI
-    RCC->CFGR |= (0b111 << 18);      // Set PLL multiplication to 9
-    RCC->CFGR |= (1 << 16);          // HSE as PLL_SRC
+    RCC->CR |= RCC_CR_HSEON;// Enable HSE
+    //RCC->CR |= RCC_CR_HSION;// Enable HSI (RC Osc)
+
+    while(!(RCC->CR & (RCC_CR_HSERDY)));   // Wait till HSE ready
+    RCC->CFGR |= RCC_CFGR_SW_HSE;                  // Swich to HSE temporarly
+    //RCC->CR   &= ~RCC_CR_HSION;                 // Disable HSI
+    RCC->CFGR |= RCC_CFGR_PLLMULL9;      // Set PLL multiplication to 9
+    RCC->CFGR |= RCC_CFGR_PLLSRC;          // HSE as PLL_SRC
     FLASH->ACR = 0b10010;            // Enable flash prefetch
-    RCC->CR |= (1 << 24);            // Enable PLL
-    while(!(RCC->CR & (1 << 25)));   // Wait till PLL ready
+    RCC->CR |= RCC_CR_PLLON;            // Enable PLL
+    while(!(RCC->CR & (RCC_CR_PLLRDY)));   // Wait till PLL ready
     RCC->CFGR = (RCC->CFGR | 0b10) & ~1; // Set PLL as Clock source
     while(!(RCC->CFGR & (1 << 3)));  // Wait till PLL is CLK SRC
     /***********    ----    Clock ready     -----   ***********/

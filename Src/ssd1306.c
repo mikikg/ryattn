@@ -2,22 +2,15 @@
 // Created by miki on 2019-04-23.
 //
 /*
- *
- * PB12 CS - OUT
- * PB13 CLK - OUT
- * PB15 MOSI - OUT
- * PB0 D/C - OUT
- * PB1 RES - OUT
- *
-    //NEW!!!!
-    //+ PB12 CS - OUT
-    //+ PB13 CLK - OUT
-    // PB14 D/C - OUT NORMAL GPIO NOT MISO!
-    //+ PB15 MOSI - OUT
-    // PA8 RES - OUT
 
+    PB12 CS - OUT
+    PB13 CLK - OUT
+    PB14 D/C - OUT NORMAL GPIO NOT MISO!
+    PB15 MOSI - OUT
+    PA8 RES - OUT
 
- * */
+*/
+
 #include "ssd1306.h"
 #include "stm32f1xx.h"
 

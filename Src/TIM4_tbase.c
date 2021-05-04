@@ -1,12 +1,13 @@
 //---------------------------------
 // Konfiguracija za TIM4 da radi kao 1kHz (1ms) timer
-// Iskoriscen ovaj HW tajmer za jos 8 64bit SW tajmera 
+// Iskoriscen ovaj HW tajmer za jos X SW tajmera
 // i osvezavanje LED
 
 #include "stm32f1xx.h"
 #include "TIM4_tbase.h"
 
-volatile uint32_t SW_timers[4];
+volatile uint32_t SW_timers[8];
+volatile uint32_t SW_timers_enable[8];
 
 void TIM4_Setup_TBASE (void) {
 	//ukljuci clock za TIM3
@@ -21,7 +22,7 @@ void TIM4_Setup_TBASE (void) {
 
 	//Enable interrupt
 	NVIC_EnableIRQ(TIM4_IRQn); //enable channel 
-	NVIC_SetPriority(TIM4_IRQn, 3); //interrupt priority
+	//NVIC_SetPriority(TIM4_IRQn, 3); //interrupt priority
 
 	//run
 	TIM4->CR1		|= TIM_CR1_CEN; //ENABLE tim periferial
@@ -29,28 +30,19 @@ void TIM4_Setup_TBASE (void) {
 
 //---------- TIM4 IRQ 1kHz / 1ms -----------------
 void TIM4_IRQHandler (void){	
-	
 	if (TIM4->SR & TIM_SR_UIF) {
 		TIM4->SR &=~ TIM_SR_UIF;//clear flag
-
-		//GPIOC->ODR ^= GPIO_ODR_ODR13; // Toggle LED 
-
-		//inkrementuj 10 32bit SW tajmera, svako po potrebi resetuje
-		SW_timers[0] ++;
-		SW_timers[1] ++;
+		//inkrementuj 8 32bit SW tajmera, svako po potrebi resetuje
+        if (SW_timers_enable[0] == 1) SW_timers[0] ++;
+        SW_timers[1] ++;
 		SW_timers[2] ++;
 		SW_timers[3] ++;
-//		SW_timers[4] ++;
-//		SW_timers[5] ++;
-//		SW_timers[6] ++;
-//		SW_timers[7] ++;
+		SW_timers[4] ++;
+		SW_timers[5] ++;
+		SW_timers[6] ++;
+		SW_timers[7] ++;
 //		SW_timers[8] ++;
 //		SW_timers[9] ++;
-		
-		//GPIOC->ODR ^= GPIO_ODR_ODR13; // Toggle LED 
-
-		//handler_led();
-
-	} 
+	}
 }
 

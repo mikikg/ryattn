@@ -4,10 +4,11 @@
  Created by miki on 23/04/2021.
 
  SPI2 (OLED display):
-	PB12 - NSS2 * (OUT)
-	PB13 - SCK2 (OUT)
-	PB14 - MISO2 (IN)
-	PB15 - MOSI2 (OUT)
+    PB12 CS - OUT
+    PB13 CLK - OUT
+    PB14 D/C - OUT NORMAL GPIO NOT MISO!
+    PB15 MOSI - OUT
+    PA8 RES - OUT
 
  UART3:
     PB10 - TX
@@ -39,48 +40,76 @@
 #include "ssd1306.h"
 #include "TIM2_enc.h"
 #include "TIM4_tbase.h"
+#include "flash.h"
+#include "USART3.h"
 
-#define Button GPIOA->IDR & GPIO_IDR_IDR2
-extern volatile uint32_t SW_timers[4];
-extern volatile int32_t MyData[10];
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EndlessLoop"
 
+extern volatile uint32_t SW_timers[8];
+extern volatile uint32_t SW_timers_enable[8];
+extern volatile int16_t MyData[20];
 extern volatile bool menu_active;
 extern volatile bool edit_active;
+extern volatile bool mute_active;
+extern volatile bool change_flag;
+extern volatile int ENC_IMPS_PER_STEP;
+extern volatile int ENC_IMPS_PER_STEP_HALF;
 
 char menu__ [] = ">";
-char menu__e [] = "=";
-static const char* const menu_items[] = {
+static char* const menu_items[] = {
         "Settings",
         " Relay Attenuator",
-        "Back",
+        "*Exit",
         "Overlap",
         "Delay",
         "Slope",
         "QEImode",
         "QEIimp/s",
         "EnableIR",
-        "ScreenSaver",
-        "FW Version 0.3.0   ",
-        "forum.yu3ma.net    "
+        "SSaverSec",
+        "*ResetSettings    ",
+        "*forum.yu3ma.net  ",
+        "*FW 0.6.0 05-2021 ",
+        "*Save & exit      ",
 };
 
-void drawHLine (int start_x, int start_y, int width) {
+void Draw_HLine (int start_x, int start_y, int width) {
     for (int x=start_x; x<width; x++) {
         ssd1306_DrawPixel(x, start_y, 1);
     }
 }
 
-void drawVU(int start_x, int start_y, int value) {
-    drawHLine(0, start_y - 2, 128);
+void Draw_VU(int start_x, int start_y, int value) {
+    Draw_HLine(0, start_y - 2, 128);
     for (int x=0; x<value; x++) {
         ssd1306_DrawPixel(x*2, start_y, 1);
         ssd1306_DrawPixel(x*2, start_y+1, 1);
         ssd1306_DrawPixel(x*2, start_y+2, 1);
         ssd1306_DrawPixel(x*2, start_y+3, 1);
     }
-    drawHLine(0, start_y + 5, 128);
+    Draw_HLine(0, start_y + 5, 128);
 }
 
+void Save_Settings() {
+    TIM2->ARR = ENC_IMPS_PER_STEP = MyData[IMPSSTEP];
+    ENC_IMPS_PER_STEP_HALF = ENC_IMPS_PER_STEP / 2; //init
+    TIM2->SMCR = MyData[QEIMODE];
+    //Save to EE ...
+    Flash_Write_MyData();
+}
+
+void Reset_Settings() {
+    MyData[VOLUME] = 64;
+    MyData[MENU] = 0;
+    MyData[OVERLAP] = 100;
+    MyData[DELAY] = 128;
+    MyData[SLOPE] = 255;
+    MyData[QEIMODE] = 2;
+    MyData[IMPSSTEP] = 200;
+    MyData[ENABLEIR] = 0;
+    MyData[SSAVER] = 0;
+}
 
 //----------------------------------------
 // Main
@@ -102,50 +131,26 @@ int main(void) {
 
     //some vars
     char buffer[32];
-    int cnt;
     bool my_blink;
+    int tmp_volume, cnt;
 
-    MyData[VOLUME] = -64;
-    MyData[MENU] = 0;
-    MyData[OVERLAP] = 100;
-    MyData[DELAY] = 128;
-    MyData[SLOPE] = 255;
-    MyData[QEIMODE] = 2;
-    MyData[IMPSSTEP] = 200;
+    //load saved data from EE
+    Flash_Read_MyData();
+
+    //restore back TMR2 settings
+    TIM2->ARR = ENC_IMPS_PER_STEP = MyData[IMPSSTEP];
+    ENC_IMPS_PER_STEP_HALF = ENC_IMPS_PER_STEP / 2; //init
+    TIM2->SMCR = MyData[QEIMODE];
 
     //---------------------
     //endless loop!
     while (1){
 
-        cnt++;
-
+        //---------------------------------------------
+        //Crtanje po ekranu ---------------------------
+        //---------------------------------------------
         ssd1306_Fill(Black);
         ssd1306_SetCursor(0, 0);
-
-        if (Button) {
-            if (SW_timers[0] > 20 && SW_timers[0] < 100) { //mali filter
-                if (menu_active) {//
-                    switch (MyData[MENU]) {
-                        case 0:
-                            menu_active = !menu_active; //izlazimo iz menu
-                            break;
-
-                        case 1:
-                        case 2:
-                        case 3:
-                        case 4:
-                        case 5:
-                            edit_active = !edit_active; //edit mode
-                            break;
-                    }
-                } else {
-                    menu_active = !menu_active; //ulazimo u menu
-                }
-                SW_timers[0]=1000; //hack :)
-            }
-        } else {
-            SW_timers[0] = 0;
-        }
 
         if (menu_active) {
             //Settings menu
@@ -182,8 +187,12 @@ int main(void) {
             }
             if (edit_active) {
                 ssd1306_WriteString(my_blink ? menu__:"", Font_7x10, White); //with blink
-                //auto turn off edit mode after 3 seconds (spare one click!)
-                if (SW_timers[2] > 3000) edit_active = 0;
+
+                //auto turn off edit mode after 2 seconds (spare one click!)
+                if (SW_timers[2] > 3000 && my_blink) {
+                    edit_active = 0;
+                    SW_timers[2]=0;
+                }
             } else {
                 ssd1306_WriteString(menu__, Font_7x10, White);
             }
@@ -192,11 +201,11 @@ int main(void) {
             //Main screen with Volume
             ssd1306_WriteString(menu_items[1], Font_7x10, White);
 
-            if (MyData[VOLUME] == -64) {
+            if (MyData[VOLUME] == 64) {
                 sprintf(buffer, "MUTE"); //
                 ssd1306_SetCursor(30, 20);
             } else {
-                sprintf(buffer, " %ddB", MyData[VOLUME]); //
+                sprintf(buffer, " -%ddB", MyData[VOLUME]); //
                 ssd1306_SetCursor(5, 20);
             }
 
@@ -205,10 +214,71 @@ int main(void) {
             ssd1306_WriteString(buffer, Font_16x26, White); //16px font
 
             //Level scale at bottom
-            drawVU(0, 58, 64 - MyData[VOLUME]*-1);
+            if (mute_active) {
+                Draw_VU(0, 58, 64 - tmp_volume);
+            } else {
+                Draw_VU(0, 58, 64 - MyData[VOLUME]);
+            }
         }
 
-        ssd1306_UpdateScreen();
-    }
-}
+        //---------------------------------------------
+        // Button -------------------------------------
+        //---------------------------------------------
+        //Button kratak klick 10-500ms
+        if (SW_timers[0] > 50 && SW_timers[0] < 500 && SW_timers_enable[0] == 0) {
+            if (menu_active) {
+                switch (MyData[MENU]) {
+                    case 0:
+                        menu_active = 0; //izlazimo iz menu
+                        break;
 
+                    case 1:
+                    case 2:
+                    case 3:
+                    case 4:
+                    case 5:
+                    case 6:
+                    case 7:
+                        edit_active = !edit_active; //edit mode
+                        break;
+
+                    case 8: //reset settings
+                        change_flag = 1;
+                        Reset_Settings();
+                        break;
+
+                    case 11: //save settings
+                        menu_active = 0; //izlazimo iz menu
+                        MyData[MENU] = 0;
+                        if (change_flag) Save_Settings();
+                        break;
+
+                }
+            } else {
+                //glavni ekran  = mute
+                mute_active = !mute_active;
+                if (mute_active) {
+                    tmp_volume = MyData[VOLUME];
+                    MyData[VOLUME] = 64;
+                } else {
+                    MyData[VOLUME] = tmp_volume;
+                }
+            }
+            SW_timers[0] = 0;
+        }
+
+        //Button dugacak klick > 1000ms aktivira menu
+        if (SW_timers[0] > 1000 && !menu_active) {
+            menu_active = 1;
+            SW_timers[0] = 0;
+            SW_timers_enable[0] = 0;
+        }
+
+        //osvezi ceo ekran
+        ssd1306_UpdateScreen();
+
+
+    } // end while (0)
+} //end main
+
+#pragma clang diagnostic pop
