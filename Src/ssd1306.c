@@ -187,10 +187,8 @@ void ssd1306_Reset(void) {
     HAL_Delay(10);
      */
     CS_on;
-    RES_off;
-    for (int x = 0; x < 200; x++) { GPIOC->BSRR = GPIO_BSRR_BS13; }
-    RES_on;
-    for (int x = 0; x < 200; x++) { GPIOC->BSRR = GPIO_BSRR_BS13; }
+    for (int x = 0; x < 100; x++) { RES_off; }
+    for (int x = 0; x < 100; x++) { RES_on; }
 
 }
 
@@ -219,10 +217,8 @@ void ssd1306_WriteCommand(uint8_t byte) {
     //vrati podatak koji je iscitan
     //return SPI2->DR;
 
-    for (int y = 0; y < 30; y++) { GPIOC->BSRR = GPIO_BSRR_BS13; }
+    for (int y = 0; y < 10; y++) { CS_on; }
 
-
-    CS_on;
 }
 
 // Send data
@@ -246,9 +242,8 @@ void ssd1306_WriteData(uint8_t* buffer, size_t buff_size) {
 
     }
 
-    for (int y = 0; y < 30; y++) { GPIOC->BSRR = GPIO_BSRR_BS13; }
+    for (int y = 0; y < 10; y++) { CS_on; }
 
-    CS_on;
 }
 
 
@@ -278,7 +273,7 @@ void ssd1306_Init(void) {
     ssd1306_Reset();
 
     // Wait for the screen to boot
-    for (int x = 0; x < 800; x++) { GPIOC->BSRR = GPIO_BSRR_BS13; }
+    for (int x = 0; x < 100; x++) { RES_on; }
 
     // Init OLED
     ssd1306_WriteCommand(0xAE); //display off
@@ -438,11 +433,9 @@ char ssd1306_WriteString(char* str, FontDef Font, SSD1306_COLOR color) {
             // Char could not be written
             return *str;
         }
-
         // Next char
         str++;
     }
-
     // Everything ok
     return *str;
 }

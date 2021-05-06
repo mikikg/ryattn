@@ -7,6 +7,56 @@
 
 #include "stm32f1xx.h"
 
+#define bitmask1 0b00000001
+#define bitmask2 0b00000010
+#define bitmask3 0b00000100
+#define bitmask4 0b00001000
+#define bitmask5 0b00010000
+#define bitmask6 0b00100000
+
+#define RY1_on GPIO_BSRR_BS3
+#define RY2_on GPIO_BSRR_BS4
+#define RY3_on GPIO_BSRR_BS5
+#define RY4_on GPIO_BSRR_BS6
+#define RY5_on GPIO_BSRR_BS7
+#define RY6_on GPIO_BSRR_BS0
+#define RY7_on GPIO_BSRR_BS1
+
+#define RY1_off GPIO_BSRR_BR3
+#define RY2_off GPIO_BSRR_BR4
+#define RY3_off GPIO_BSRR_BR5
+#define RY4_off GPIO_BSRR_BR6
+#define RY5_off GPIO_BSRR_BR7
+#define RY6_off GPIO_BSRR_BR0
+#define RY7_off GPIO_BSRR_BR1
+
+
+/* --- PRINTF_BYTE_TO_BINARY macro's --- */
+#define PRINTF_BINARY_PATTERN_INT8 "%c%c%c%c%c%c%c%c"
+#define PRINTF_BYTE_TO_BINARY_INT8(i)    \
+    (((i) & 0x80ll) ? '1' : '0'), \
+    (((i) & 0x40ll) ? '1' : '0'), \
+    (((i) & 0x20ll) ? '1' : '0'), \
+    (((i) & 0x10ll) ? '1' : '0'), \
+    (((i) & 0x08ll) ? '1' : '0'), \
+    (((i) & 0x04ll) ? '1' : '0'), \
+    (((i) & 0x02ll) ? '1' : '0'), \
+    (((i) & 0x01ll) ? '1' : '0')
+
+#define PRINTF_BINARY_PATTERN_INT16 \
+    PRINTF_BINARY_PATTERN_INT8              PRINTF_BINARY_PATTERN_INT8
+#define PRINTF_BYTE_TO_BINARY_INT16(i) \
+    PRINTF_BYTE_TO_BINARY_INT8((i) >> 8),   PRINTF_BYTE_TO_BINARY_INT8(i)
+#define PRINTF_BINARY_PATTERN_INT32 \
+    PRINTF_BINARY_PATTERN_INT16             PRINTF_BINARY_PATTERN_INT16
+#define PRINTF_BYTE_TO_BINARY_INT32(i) \
+    PRINTF_BYTE_TO_BINARY_INT16((i) >> 16), PRINTF_BYTE_TO_BINARY_INT16(i)
+#define PRINTF_BINARY_PATTERN_INT64    \
+    PRINTF_BINARY_PATTERN_INT32             PRINTF_BINARY_PATTERN_INT32
+#define PRINTF_BYTE_TO_BINARY_INT64(i) \
+    PRINTF_BYTE_TO_BINARY_INT32((i) >> 32), PRINTF_BYTE_TO_BINARY_INT32(i)
+/* --- end macros --- */
+
 void MYSYS_init(void) {
     /***********    ----    Clock Setup     -----   ***********/
     //  HSI -> PLL -> SYSCLK

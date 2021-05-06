@@ -18,7 +18,7 @@ volatile uint16_t MyDataLimHI[20] = {
         0, //
         0,  //
         100,  // OVERLAP
-        255, // DELAY
+        500, // DELAY
         255, // SLOPE
         3, // QEIMODE
         2000, // IMPSSTEP
@@ -43,8 +43,8 @@ volatile bool mute_active = 0;
 volatile bool change_flag = 0;
 volatile int ENC_IMPS_PER_STEP = 200;
 volatile int ENC_IMPS_PER_STEP_HALF;
-extern volatile uint32_t SW_timers[4];
-extern volatile uint32_t SW_timers_enable[4];
+extern volatile uint32_t SW_timers[8];
+extern volatile uint32_t SW_timers_enable[8];
 
 void TIM2_Setup_GPIO (void) {
 

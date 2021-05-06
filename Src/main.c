@@ -39,15 +39,24 @@
 #include "main.h"
 #include "ssd1306.h"
 #include "TIM2_enc.h"
-#include "TIM4_tbase.h"
 #include "flash.h"
 #include "USART3.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 
-extern volatile uint32_t SW_timers[8];
-extern volatile uint32_t SW_timers_enable[8];
+//some vars
+bool update_seq_up_down;
+bool my_blink;
+int current_seq_position = 1;
+int seq_position_max = 6;
+int tmp_volume, cnt;
+int fps, fps_last;
+char buffer[32];
+
+volatile uint32_t SW_timers[8];
+volatile uint32_t SW_timers_enable[8];
+
 extern volatile int16_t MyData[20];
 extern volatile bool menu_active;
 extern volatile bool edit_active;
@@ -70,7 +79,7 @@ static char* const menu_items[] = {
         "SSaverSec",
         "*ResetSettings    ",
         "*forum.yu3ma.net  ",
-        "*FW 0.6.0 05-2021 ",
+        "*FW 0.8.0 05-2021 ",
         "*Save & exit      ",
 };
 
@@ -111,6 +120,49 @@ void Reset_Settings() {
     MyData[SSAVER] = 0;
 }
 
+//--------------------------------------------------------
+//------------------------ RELAYS ------------------------
+//--------------------------------------------------------
+void Handle_Relays() {
+    if (MyData[DELAY] == 0) {
+        GPIOA->BSRR = MyData[VOLUME] & bitmask1 ? RY1_on : RY1_off; //PA3 -1dB
+        GPIOA->BSRR = MyData[VOLUME] & bitmask2 ? RY2_on : RY2_off; //PA4 -2dB
+        GPIOA->BSRR = MyData[VOLUME] & bitmask3 ? RY3_on : RY3_off; //PA5 -4dB
+        GPIOA->BSRR = MyData[VOLUME] & bitmask4 ? RY4_on : RY4_off; //PA6 -8dB
+        GPIOA->BSRR = MyData[VOLUME] & bitmask5 ? RY5_on : RY5_off; //PA7 -16dB
+        GPIOB->BSRR = MyData[VOLUME] & bitmask6 ? RY6_on : RY6_off; //PB0 -32dB
+    } else if (SW_timers[7] >= MyData[DELAY]) { SW_timers[7] = 0;
+        switch (current_seq_position) {
+            case 1: GPIOA->BSRR = MyData[VOLUME] & bitmask1 ? RY1_on : RY1_off; break; //PA3 -1dB
+            case 2: GPIOA->BSRR = MyData[VOLUME] & bitmask2 ? RY2_on : RY2_off; break; //PA4 -2dB
+            case 3: GPIOA->BSRR = MyData[VOLUME] & bitmask3 ? RY3_on : RY3_off; break; //PA5 -4dB
+            case 4: GPIOA->BSRR = MyData[VOLUME] & bitmask4 ? RY4_on : RY4_off; break; //PA6 -8dB
+            case 5: GPIOA->BSRR = MyData[VOLUME] & bitmask5 ? RY5_on : RY5_off; break; //PA7 -16dB
+            case 6: GPIOB->BSRR = MyData[VOLUME] & bitmask6 ? RY6_on : RY6_off; break; //PB0 -32dB
+        }
+        if (update_seq_up_down) {
+            if (current_seq_position++ >= seq_position_max) current_seq_position = 1;
+        } else {
+            if (current_seq_position-- <= 1) current_seq_position = seq_position_max ;
+        }
+    }
+}
+
+// Konfiguracija (72000) za SysTick da radi kao 1kHz (1ms) timer
+// Iskoriscen SysTick HW tajmer za jos X SW tajmera + Handle_relays()
+void SysTick_Handler (void) {
+    if (SW_timers_enable[0] == 1) SW_timers[0] ++;
+    SW_timers[1] ++;
+    SW_timers[2] ++;
+    SW_timers[3] ++;
+    SW_timers[4] ++;
+    SW_timers[5] ++;
+    SW_timers[6] ++;
+    SW_timers[7] ++;
+
+    Handle_Relays(); //Function call every 1ms
+}
+
 //----------------------------------------
 // Main
 //----------------------------------------
@@ -120,7 +172,7 @@ int main(void) {
     GPIO_init();
     USART3_init();
     TIM2_Setup_ENC();
-    TIM4_Setup_TBASE();
+    SysTick_Config(72000); //1ms
 
     ssd1306_Init();
     ssd1306_Fill(0);
@@ -128,11 +180,6 @@ int main(void) {
     //ssd1306_TestFonts();
     //for (int y = 0; y < 5000000; y++) { GPIOC->BSRR = GPIO_BSRR_BR13; } //some delay
     //ssd1306_Fill(0);
-
-    //some vars
-    char buffer[32];
-    bool my_blink;
-    int tmp_volume, cnt;
 
     //load saved data from EE
     Flash_Read_MyData();
@@ -145,6 +192,13 @@ int main(void) {
     //---------------------
     //endless loop!
     while (1){
+
+        fps++;
+        if (SW_timers[6] >= 1000) { SW_timers[6] = 0;
+            GPIOC->ODR ^= GPIO_ODR_ODR13; // Toggle LED which connected to PC13
+            fps_last = fps;
+            fps = 0;
+        }
 
         //---------------------------------------------
         //Crtanje po ekranu ---------------------------
@@ -213,12 +267,17 @@ int main(void) {
             //ssd1306_WriteString(buffer, Font_11x18, White); //11px font
             ssd1306_WriteString(buffer, Font_16x26, White); //16px font
 
+            //debug ----------------
+            //FPS
+            //sprintf(buffer, "%01B" PRINTF_BINARY_PATTERN_INT8, PRINTF_BYTE_TO_BINARY_INT8(MyData[VOLUME])); //
+            sprintf(buffer, "FPS=%d", fps_last); //
+            //sprintf(buffer, "FPS=%d", current_seq_position); //
+            ssd1306_SetCursor(7, 10);
+            ssd1306_WriteString(buffer, Font_7x10, White); //7px font
+
             //Level scale at bottom
-            if (mute_active) {
-                Draw_VU(0, 58, 64 - tmp_volume);
-            } else {
-                Draw_VU(0, 58, 64 - MyData[VOLUME]);
-            }
+            Draw_VU(0, 58, 64 - (mute_active ? tmp_volume : MyData[VOLUME]) );
+
         }
 
         //---------------------------------------------
@@ -268,17 +327,16 @@ int main(void) {
         }
 
         //Button dugacak klick > 1000ms aktivira menu
-        if (SW_timers[0] > 1000 && !menu_active) {
+        if (SW_timers[0] >= 1000 && !menu_active) {
             menu_active = 1;
             SW_timers[0] = 0;
             SW_timers_enable[0] = 0;
         }
 
-        //osvezi ceo ekran
+        //pred kraj osvezi ceo ekran
         ssd1306_UpdateScreen();
 
-
-    } // end while (0)
+    } // end while (1)
 } //end main
 
 #pragma clang diagnostic pop
