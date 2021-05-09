@@ -14,7 +14,7 @@
 extern volatile int ENC_IMPS_PER_STEP;
 extern volatile int ENC_IMPS_PER_STEP_HALF;
 extern volatile uint16_t MyData[20];
-extern volatile bool change_flag;
+extern volatile bool save_change_flag;
 
 void Flash_Write_MyData() {
 
@@ -83,7 +83,7 @@ void Flash_Write_MyData() {
 
     GPIOC->BSRR = GPIO_BSRR_BS13; //LED OFF
 
-    change_flag = 0;
+    save_change_flag = 0;
 
 }
 
@@ -92,9 +92,9 @@ void Flash_Read_MyData() {
     //Read this from EE ...
     MyData[VOLUME] = 64;
     MyData[MENU] = 0;
-    MyData[OVERLAP] = 100;
+    MyData[OPMODE] = 0;
     MyData[DELAY] = 128;
-    MyData[SLOPE] = 255;
+    MyData[DEBUG] = 1;
     MyData[QEIMODE] = 2;
     MyData[IMPSSTEP] = 200;
     MyData[ENABLEIR] = 0;

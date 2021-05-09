@@ -17,9 +17,9 @@ volatile uint16_t MyData[20];
 volatile uint16_t MyDataLimHI[20] = {
         0, //
         0,  //
-        100,  // OVERLAP
+        2,  // OPmode
         500, // DELAY
-        255, // SLOPE
+        1, // DEBUG
         3, // QEIMODE
         2000, // IMPSSTEP
         1, // ENABLEIR
@@ -28,7 +28,7 @@ volatile uint16_t MyDataLimHI[20] = {
 volatile uint16_t MyDataLimLO[20] = {
         0, //
         0,  //
-        0,  // OVERLAP
+        0,  // OPmode
         0, // DELAY
         0, // SLOPE
         2, // QEIMODE
@@ -40,11 +40,18 @@ volatile uint16_t MyDataLimLO[20] = {
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;
 volatile bool mute_active = 0;
-volatile bool change_flag = 0;
+volatile bool save_change_flag = 0;
+volatile bool vol_change_flag = 0;
 volatile int ENC_IMPS_PER_STEP = 200;
 volatile int ENC_IMPS_PER_STEP_HALF;
 extern volatile uint32_t SW_timers[8];
 extern volatile uint32_t SW_timers_enable[8];
+extern volatile bool screen_saver_active;
+
+extern volatile bool update_seq_up_down;
+extern volatile int current_seq_position;
+extern volatile int seq_position_max;
+
 
 void TIM2_Setup_GPIO (void) {
 
@@ -133,11 +140,21 @@ void TIM2_IRQHandler (void){
                 } else {
                     if (MyData[SELMENU] < MyDataLimHI[SELMENU]) {
                         MyData[SELMENU]++; //increment data
-                        change_flag = 1;
+                        save_change_flag = 1;
                     }
                 }
             } else {
-                if (!mute_active && MyData[VOLUME] > 0) MyData[VOLUME] --;
+                if (!mute_active && MyData[VOLUME] > 0) {
+                    MyData[VOLUME] --;
+                    vol_change_flag = 1;
+                    SW_timers[7]=0;
+
+                    if (update_seq_up_down) {
+                        current_seq_position = 0;
+                    } else {
+                        current_seq_position = seq_position_max ;
+                    }
+                }
             }
 		} else {
             TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
@@ -147,11 +164,21 @@ void TIM2_IRQHandler (void){
                 } else {
                     if (MyData[SELMENU] > MyDataLimLO[SELMENU]) {
                         MyData[SELMENU] --; //decrement data
-                        change_flag = 1;
+                        save_change_flag = 1;
                     }
                 }
             } else {
-                if (!mute_active && MyData[VOLUME] < 64) MyData[VOLUME] ++;
+                if (!mute_active && MyData[VOLUME] < 64) {
+                    MyData[VOLUME] ++;
+                    vol_change_flag = 1;
+                    SW_timers[7]=0;
+
+                    if (update_seq_up_down) {
+                        current_seq_position = 0;
+                    } else {
+                        current_seq_position = seq_position_max ;
+                    }
+                }
             }
 		}
 
@@ -159,6 +186,11 @@ void TIM2_IRQHandler (void){
 
         //reset timer for last update
         SW_timers[2] = 0;
+
+        //probudi ekran i ugasi led
+        screen_saver_active = false;
+        SW_timers[5] = 0;
+        //GPIOC->BSRR = GPIO_BSRR_BS13;
     }
 }
 
@@ -167,5 +199,10 @@ void EXTI2_IRQHandler (void){ //button padajuca ivica ...
     if (EXTI->PR & EXTI_PR_PR2) { //jel pending od kanala 2?
         SW_timers_enable[0] = Button ? 1 : 0;
         EXTI->PR |= EXTI_PR_PR2; //flag se cisti tako sto se upise 1
+
+        //probudi ekran i ugasi led
+        screen_saver_active = false;
+        SW_timers[5] = 0;
+        //GPIOC->BSRR = GPIO_BSRR_BS13;
     }
 }

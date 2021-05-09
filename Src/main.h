@@ -7,27 +7,27 @@
 
 #include "stm32f1xx.h"
 
-#define bitmask1 0b00000001
-#define bitmask2 0b00000010
-#define bitmask3 0b00000100
-#define bitmask4 0b00001000
-#define bitmask5 0b00010000
-#define bitmask6 0b00100000
+#define bitmask1 (MyData[VOLUME] & 0b00000001)
+#define bitmask2 (MyData[VOLUME] & 0b00000010)
+#define bitmask3 (MyData[VOLUME] & 0b00000100)
+#define bitmask4 (MyData[VOLUME] & 0b00001000)
+#define bitmask5 (MyData[VOLUME] & 0b00010000)
+#define bitmask6 (MyData[VOLUME] & 0b00100000)
 
-#define RY1_on GPIO_BSRR_BS3
-#define RY2_on GPIO_BSRR_BS4
-#define RY3_on GPIO_BSRR_BS5
-#define RY4_on GPIO_BSRR_BS6
-#define RY5_on GPIO_BSRR_BS7
-#define RY6_on GPIO_BSRR_BS0
+#define RY1_on GPIOA->BSRR=GPIO_BSRR_BS3
+#define RY2_on GPIOA->BSRR=GPIO_BSRR_BS4
+#define RY3_on GPIOA->BSRR=GPIO_BSRR_BS5
+#define RY4_on GPIOA->BSRR=GPIO_BSRR_BS6
+#define RY5_on GPIOA->BSRR=GPIO_BSRR_BS7
+#define RY6_on GPIOB->BSRR=GPIO_BSRR_BS0
 #define RY7_on GPIO_BSRR_BS1
 
-#define RY1_off GPIO_BSRR_BR3
-#define RY2_off GPIO_BSRR_BR4
-#define RY3_off GPIO_BSRR_BR5
-#define RY4_off GPIO_BSRR_BR6
-#define RY5_off GPIO_BSRR_BR7
-#define RY6_off GPIO_BSRR_BR0
+#define RY1_off GPIOA->BSRR=GPIO_BSRR_BR3
+#define RY2_off GPIOA->BSRR=GPIO_BSRR_BR4
+#define RY3_off GPIOA->BSRR=GPIO_BSRR_BR5
+#define RY4_off GPIOA->BSRR=GPIO_BSRR_BR6
+#define RY5_off GPIOA->BSRR=GPIO_BSRR_BR7
+#define RY6_off GPIOB->BSRR=GPIO_BSRR_BR0
 #define RY7_off GPIO_BSRR_BR1
 
 
