@@ -92,12 +92,13 @@ void Flash_Read_MyData() {
     //Read this from EE ...
     MyData[VOLUME] = 64;
     MyData[MENU] = 0;
-    MyData[OPMODE] = 0;
-    MyData[DELAY] = 128;
-    MyData[DEBUG] = 1;
+    MyData[OPMODE] = 1;
+    MyData[DELAY] = 10;
+    MyData[DEBUG] = 0;
     MyData[QEIMODE] = 2;
     MyData[IMPSSTEP] = 200;
     MyData[ENABLEIR] = 0;
+    MyData[THEME] = 3;
     MyData[SSAVER] = 0;
      */
 

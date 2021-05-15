@@ -21,6 +21,8 @@
 #define CS_on   GPIOB->BSRR=GPIO_BSRR_BS12;
 #define CS_off  GPIOB->BSRR=GPIO_BSRR_BR12;
 
+#define command ssd1306_WriteCommand
+
 #if defined(SSD1306_USE_I2C)
 
 void ssd1306_Reset(void) {
@@ -72,21 +74,12 @@ void ssd1306_WriteData(uint8_t* buffer, size_t buff_size) {
 
 void initPinsSD1306() {
 
-    //OLD
-    // PB12 CS - OUT
-    // PB13 CLK - OUT
-    // PB14 MISO - IN (not used by SD1306)
-    // PB15 MOSI - OUT
-    // PB0 D/C - OUT
-    // PB1 RES - OUT
-
     //NEW!!!!
     //+ PB12 CS - OUT
     //+ PB13 CLK - OUT
     // PB14 D/C - OUT NORMAL GPIO NOT MISO!
     //+ PB15 MOSI - OUT
     // PA8 RES - OUT
-
 
     //--------------- PB12 / CS -------------
     //GP function Output Push-Pull

@@ -17,25 +17,29 @@ volatile uint16_t MyData[20];
 volatile uint16_t MyDataLimHI[20] = {
         0, //
         0,  //
-        2,  // OPmode
+        3,  // OPmode
         500, // DELAY
         1, // DEBUG
         3, // QEIMODE
         2000, // IMPSSTEP
-        1, // ENABLEIR
+        0, // ENABLEIR
+        8, // THEME
         5*60, // SSAVER
 };
 volatile uint16_t MyDataLimLO[20] = {
         0, //
         0,  //
-        0,  // OPmode
+        1,  // OPmode
         0, // DELAY
         0, // SLOPE
         2, // QEIMODE
         1, // IMPSSTEP
         0, // ENABLEIR
+        0, // THEME
         0, // SSAVER
 };
+
+#define max_menu 12
 
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;
@@ -44,14 +48,13 @@ volatile bool save_change_flag = 0;
 volatile bool vol_change_flag = 0;
 volatile int ENC_IMPS_PER_STEP = 200;
 volatile int ENC_IMPS_PER_STEP_HALF;
+
 extern volatile uint32_t SW_timers[8];
 extern volatile uint32_t SW_timers_enable[8];
 extern volatile bool screen_saver_active;
-
 extern volatile bool update_seq_up_down;
 extern volatile int current_seq_position;
 extern volatile int seq_position_max;
-
 
 void TIM2_Setup_GPIO (void) {
 
@@ -129,7 +132,7 @@ void TIM2_Setup_ENC (void) {
 #define SELMENU MyData[MENU]+1
 
 //---------- TIM2 IRQ -----------------
-void TIM2_IRQHandler (void){	
+void TIM2_IRQHandler (void){
 
 	if (TIM2->SR & TIM_SR_UIF) {//update interupt
 		if (TIM2->CR1 & TIM_CR1_DIR) {//koji je smer
@@ -148,19 +151,14 @@ void TIM2_IRQHandler (void){
                     MyData[VOLUME] --;
                     vol_change_flag = 1;
                     SW_timers[7]=0;
-
-                    if (update_seq_up_down) {
-                        current_seq_position = 0;
-                    } else {
-                        current_seq_position = seq_position_max ;
-                    }
+                    current_seq_position = update_seq_up_down ? 0 : seq_position_max;
                 }
             }
 		} else {
             TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
             if (menu_active) {
                 if (!edit_active) {
-                    if (MyData[MENU] < 11) MyData[MENU] ++;
+                    if (MyData[MENU] < max_menu) MyData[MENU] ++;
                 } else {
                     if (MyData[SELMENU] > MyDataLimLO[SELMENU]) {
                         MyData[SELMENU] --; //decrement data
@@ -172,12 +170,7 @@ void TIM2_IRQHandler (void){
                     MyData[VOLUME] ++;
                     vol_change_flag = 1;
                     SW_timers[7]=0;
-
-                    if (update_seq_up_down) {
-                        current_seq_position = 0;
-                    } else {
-                        current_seq_position = seq_position_max ;
-                    }
+                    current_seq_position = update_seq_up_down ? 0 : seq_position_max;
                 }
             }
 		}
@@ -206,3 +199,4 @@ void EXTI2_IRQHandler (void){ //button padajuca ivica ...
         //GPIOC->BSRR = GPIO_BSRR_BS13;
     }
 }
+
