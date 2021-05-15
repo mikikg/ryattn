@@ -46,7 +46,7 @@ volatile bool edit_active = 0;
 volatile bool mute_active = 0;
 volatile bool save_change_flag = 0;
 volatile bool vol_change_flag = 0;
-volatile int ENC_IMPS_PER_STEP = 200;
+volatile int ENC_IMPS_PER_STEP = 2;
 volatile int ENC_IMPS_PER_STEP_HALF;
 
 extern volatile uint32_t SW_timers[8];
