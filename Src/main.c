@@ -89,10 +89,14 @@ void Draw_VU(int start_x, int start_y, int value) {
     Draw_HLine(0, start_y + 5, 128);
 }
 
-void Save_Settings() {
+void Update_Encoder_Settings() {
     TIM2->ARR = ENC_IMPS_PER_STEP = MyData[IMPSSTEP];
     ENC_IMPS_PER_STEP_HALF = ENC_IMPS_PER_STEP / 2; //init
     TIM2->SMCR = MyData[QEIMODE];
+}
+
+void Save_Settings() {
+    Update_Encoder_Settings();
     //Save to EE ...
     Flash_Write_MyData();
 }
@@ -104,10 +108,11 @@ void Reset_Settings() {
     MyData[DELAY] = 10;
     MyData[DEBUG] = 0;
     MyData[QEIMODE] = 2;
-    MyData[IMPSSTEP] = 200;
+    MyData[IMPSSTEP] = ENC_IMPS_PER_STEP;
     MyData[ENABLEIR] = 0;
     MyData[THEME] = 3;
     MyData[SSAVER] = 0;
+    Update_Encoder_Settings();
 }
 
 const struct {
@@ -251,8 +256,10 @@ int main(void) {
     //for (int y = 0; y < 5000000; y++) { GPIOC->BSRR = GPIO_BSRR_BR13; } //some delay
     //ssd1306_Fill(0);
 
-    //load saved data from EE
+    //load saved data from EE, but reset to default before load in case od EE non-init error
+    Reset_Settings();
     Flash_Read_MyData();
+    Update_Encoder_Settings();
 
     //restore back TMR2 settings
     TIM2->ARR = ENC_IMPS_PER_STEP = MyData[IMPSSTEP];

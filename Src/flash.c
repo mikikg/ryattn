@@ -65,6 +65,10 @@ void Flash_Write_MyData() {
         *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * a) = MyData[a];       // Write data
     }
 
+    //Write Magic Word (careful!)
+    *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * 510) = 'M'*256+'i';
+    *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * 511) = 'k'*256+'i';
+
     // Wait until the end of the operation
     while ((FLASH->SR & FLASH_SR_BSY) != 0);
     // If the end of operation bit is set...
@@ -104,9 +108,15 @@ void Flash_Read_MyData() {
 
     GPIOC->BSRR = GPIO_BSRR_BR13; //LED ON
 
-    //copy data from EE to MyData
-    for (int a=0; a< sizeof(MyData)/ sizeof(uint16_t); a++) {//20 * 16bit
-        MyData[a] = *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * a) ;       // Read data
+    //Read only if initialized
+    if (*(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * 510) == 'M'*256+'i'
+            && *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * 511) == 'k'*256+'i') {
+        //found, all ok
+
+        //copy data from EE to MyData
+        for (int a = 0; a < sizeof(MyData) / sizeof(uint16_t); a++) {//20 * 16bit
+            MyData[a] = *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * a);       // Read data
+        }
     }
 
     GPIOC->BSRR = GPIO_BSRR_BS13; //LED OFF

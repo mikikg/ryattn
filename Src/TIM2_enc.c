@@ -149,6 +149,7 @@ void TIM2_IRQHandler (void){
             } else {
                 if (!mute_active && MyData[VOLUME] > 0) {
                     MyData[VOLUME] --;
+                    save_change_flag = 1;
                     vol_change_flag = 1;
                     SW_timers[7]=0;
                     current_seq_position = update_seq_up_down ? 0 : seq_position_max;
@@ -168,6 +169,7 @@ void TIM2_IRQHandler (void){
             } else {
                 if (!mute_active && MyData[VOLUME] < 64) {
                     MyData[VOLUME] ++;
+                    save_change_flag = 1;
                     vol_change_flag = 1;
                     SW_timers[7]=0;
                     current_seq_position = update_seq_up_down ? 0 : seq_position_max;
