@@ -13,7 +13,7 @@
 
 extern volatile int ENC_IMPS_PER_STEP;
 extern volatile int ENC_IMPS_PER_STEP_HALF;
-extern volatile uint16_t MyData[20];
+extern volatile uint16_t MyData[32];
 extern volatile bool save_change_flag;
 
 void Flash_Write_MyData() {
@@ -61,7 +61,7 @@ void Flash_Write_MyData() {
     FLASH->CR |= FLASH_CR_PG;                   // Programing mode
 
     //copy MyData to EE
-    for (int a=0; a<20; a++) {//20 * 16bit
+    for (int a=0; a<32; a++) {//32 * 16bit
         *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * a) = MyData[a];       // Write data
     }
 
@@ -104,6 +104,7 @@ void Flash_Read_MyData() {
     MyData[ENABLEIR] = 0;
     MyData[THEME] = 3;
     MyData[SSAVER] = 0;
+     ...
      */
 
     GPIOC->BSRR = GPIO_BSRR_BR13; //LED ON
@@ -114,7 +115,7 @@ void Flash_Read_MyData() {
         //found, all ok
 
         //copy data from EE to MyData
-        for (int a = 0; a < sizeof(MyData) / sizeof(uint16_t); a++) {//20 * 16bit
+        for (int a = 0; a < sizeof(MyData) / sizeof(uint16_t); a++) {//32 * 16bit
             MyData[a] = *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * a);       // Read data
         }
     }

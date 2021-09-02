@@ -20,7 +20,10 @@
 #define RY4_on GPIOA->BSRR=GPIO_BSRR_BS6
 #define RY5_on GPIOA->BSRR=GPIO_BSRR_BS7
 #define RY6_on GPIOB->BSRR=GPIO_BSRR_BS0
-#define RY7_on GPIOB->BSRR=GPIO_BSRR_BS1
+#define RY7_on GPIOB->BSRR=GPIO_BSRR_BS1 //mute
+
+#define RY8_on GPIOC->BSRR=GPIO_BSRR_BS14 //power off/on
+#define RY9_on GPIOC->BSRR=GPIO_BSRR_BS15 //ch sw
 
 #define RY1_off GPIOA->BSRR=GPIO_BSRR_BR3
 #define RY2_off GPIOA->BSRR=GPIO_BSRR_BR4
@@ -28,7 +31,13 @@
 #define RY4_off GPIOA->BSRR=GPIO_BSRR_BR6
 #define RY5_off GPIOA->BSRR=GPIO_BSRR_BR7
 #define RY6_off GPIOB->BSRR=GPIO_BSRR_BR0
-#define RY7_off GPIOB->BSRR=GPIO_BSRR_BR1
+#define RY7_off GPIOB->BSRR=GPIO_BSRR_BR1 //mute
+
+#define RY8_off GPIOC->BSRR=GPIO_BSRR_BR14 //power off/on
+#define RY9_off GPIOC->BSRR=GPIO_BSRR_BR15 //ch sw
+
+#define IR_PIN (GPIOB->IDR & GPIO_IDR_IDR3) //IR
+#define Button (GPIOA->IDR & GPIO_IDR_IDR2) //Button
 
 
 /* --- PRINTF_BYTE_TO_BINARY macro's --- */
@@ -114,6 +123,10 @@ void GPIO_init(void) {
 
  Mute OUT:
     PB1
+
+ IR Input (EXTI3)
+    PB3
+
      */
 
     //--------------- PA3 - Relay 1 -------------
@@ -178,6 +191,46 @@ void GPIO_init(void) {
     GPIOB->CRL |=  GPIO_CRL_MODE1_0; //setuj bit MODE1_0
     GPIOB->CRL |=  GPIO_CRL_MODE1_1; //setuj bit MODE1_1
     GPIOB->BSRR=GPIO_BSRR_BR1; //PB1 = LOW
+
+    //--------------- PC14 - Power Off/On -------------
+    GPIOC->CRH &= ~GPIO_CRH_CNF14_0; //ocisti bit CNF14_0
+    GPIOC->CRH &= ~GPIO_CRH_CNF14_1; //ocisti bit CNF14_1
+    GPIOC->CRH |= GPIO_CRH_MODE14_0; //setuj bit MODE14_0
+    GPIOC->CRH |= GPIO_CRH_MODE14_1; //setuj bit MODE14_1
+
+    //--------- PC15 - Input CH1/CH2 switch -------------
+    GPIOC->CRH &= ~GPIO_CRH_CNF15_0; //ocisti bit CNF15_0
+    GPIOC->CRH &= ~GPIO_CRH_CNF15_1; //ocisti bit CNF15_1
+    GPIOC->CRH |= GPIO_CRH_MODE15_0; //setuj bit MODE15_0
+    GPIOC->CRH |= GPIO_CRH_MODE15_1; //setuj bit MODE15_1
+
+    //-------------- IR INPUT ------------------------
+    //konfiguracija PB3 - IR EXTI3 input
+    //definisi ga kao INPUT, pull-down
+    GPIOB->CRL &= ~GPIO_CRL_CNF3_0; //ocisti bit
+    GPIOB->CRL |=  GPIO_CRL_CNF3_1; //setuj bit
+    GPIOB->CRL &= ~GPIO_CRL_MODE3_0; //ocisti bit
+    GPIOB->CRL &= ~GPIO_CRL_MODE3_1; //ocisti bit
+    GPIOB->BSRR =  GPIO_BSRR_BS3; //BS0=1=pull-up, BR0=0=pull-down
+
+    //IR Input preko interapta ------------------------
+    //Konfigurisi EXTI3 za PBx (podrazumeva se PB3)
+    AFIO->EXTICR[0] |= AFIO_EXTICR1_EXTI3_PB;
+
+    //unmaskiraj EXTI3
+    EXTI->IMR |= EXTI_IMR_MR3;
+
+    //podesi da se aktivira interupt na obe ivice
+    //rastuca=EXTI_RTSR, padajuca=EXTI_FTSR
+    EXTI->RTSR |= EXTI_RTSR_TR3;
+    EXTI->FTSR |= EXTI_FTSR_TR3;
+
+    //Enable NVIC EXTI interrupt za PB3, on je na EXTI3
+    NVIC_EnableIRQ(EXTI3_IRQn); //enable channel
+    //NVIC_SetPriority(EXTI3_IRQn, 1); //interupt priority
+
+    EXTI->PR |= EXTI_PR_PR3; //flag se cisti tako sto se upise 1
+
 
 }
 

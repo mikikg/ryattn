@@ -13,20 +13,26 @@
 
 #define Button GPIOA->IDR & GPIO_IDR_IDR2
 
-volatile uint16_t MyData[20];
-volatile uint16_t MyDataLimHI[20] = {
+volatile uint16_t MyData[32];
+volatile uint16_t MyDataLimHI[32] = {
         0, //
         0,  //
-        3,  // OPmode
+        4,  // OPmode
         500, // DELAY
         1, // DEBUG
         3, // QEIMODE
         2000, // IMPSSTEP
-        0, // ENABLEIR
+        1, // ENABLEIR
         8, // THEME
         5*60, // SSAVER
+        255, // IR-volUP
+        255, // IR-volDOWN
+        255, // IR-Mute
+        255, // IR-CHSW
+        255, // IR-Power
+        2,   // Input CH
 };
-volatile uint16_t MyDataLimLO[20] = {
+volatile uint16_t MyDataLimLO[32] = {
         0, //
         0,  //
         1,  // OPmode
@@ -37,9 +43,15 @@ volatile uint16_t MyDataLimLO[20] = {
         0, // ENABLEIR
         0, // THEME
         0, // SSAVER
+        1, // IR-volUP
+        1, // IR-volDOWN
+        1, // IR-Mute
+        1, // IR-CHSW
+        1, // IR-Power
+        1, // Input CH
 };
 
-#define max_menu 12
+#define max_menu 19
 
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;
@@ -58,7 +70,7 @@ extern volatile int seq_position_max;
 
 void TIM2_Setup_GPIO (void) {
 
-    //ukljuci clock za TIM4
+    //ukljuci clock za TIM2
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 
     //konfiguracija PA0 - A input
@@ -131,7 +143,7 @@ void TIM2_Setup_ENC (void) {
 
 #define SELMENU MyData[MENU]+1
 
-//---------- TIM2 IRQ -----------------
+//---------- TIM2 IRQ za enkoder -----------------
 void TIM2_IRQHandler (void){
 
 	if (TIM2->SR & TIM_SR_UIF) {//update interupt
@@ -179,13 +191,9 @@ void TIM2_IRQHandler (void){
 
         TIM2->SR &=~ TIM_SR_UIF;//clear flag
 
-        //reset timer for last update
-        SW_timers[2] = 0;
-
-        //probudi ekran i ugasi led
+        //probudi ekran
         screen_saver_active = false;
         SW_timers[5] = 0;
-        //GPIOC->BSRR = GPIO_BSRR_BS13;
     }
 }
 
