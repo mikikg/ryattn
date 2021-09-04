@@ -31,6 +31,7 @@ volatile uint16_t MyDataLimHI[32] = {
         255, // IR-CHSW
         255, // IR-Power
         2,   // Input CH
+        1,   // RY Power save
 };
 volatile uint16_t MyDataLimLO[32] = {
         0, //
@@ -49,9 +50,10 @@ volatile uint16_t MyDataLimLO[32] = {
         1, // IR-CHSW
         1, // IR-Power
         1, // Input CH
+        0, // RY Power save
 };
 
-#define max_menu 19
+#define max_menu 20
 
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;

@@ -58,7 +58,7 @@
 
 #define theme_enable_title 1
 #define theme_enable_vu 2
-#define max_menu 19
+#define max_menu 20
 
 //some vars
 volatile bool update_seq_up_down = 1;
@@ -249,6 +249,7 @@ void Reset_Settings() {
     MyData[IRCHSW] = 3;
     MyData[IRPOWER] = 95;
     MyData[INPUTCH] = 1;
+    MyData[POWSAVE] = 1;
     Update_Encoder_Settings();
 }
 
@@ -273,11 +274,12 @@ const struct {
         {"IR-CHSW",             1},//14
         {"IR-Power",            1},//15
         {"Input-CH",            1},//16
-        {"*ResetSettings!",     0},//17
-        {"*forum.yu3ma.net",    0},//18
-        {"*FW 0.9.9 09-2021",   0},//19
-        {"*Power OFF",          0},//20
-        {"*Save & Exit",        0},//21
+        {"STB-PowerSave",       1},//17
+        {"*ResetSettings!",     0},//18
+        {"*forum.yu3ma.net",    0},//19
+        {"*FW 0.9.9 09-2021",   0},//20
+        {"*Power OFF",          0},//21
+        {"*Save & Exit",        0},//22
 };
 
 //--------------------------------------------------------
@@ -383,22 +385,44 @@ void SysTick_Handler (void) {
     SW_timers[T_FPS] ++;
     SW_timers[T_RY] ++;
 
-    //switch operation mode, function call every 1ms
-    switch (MyData[OPMODE]) {
-        case 1: Handle_Relays_mode1(); break;
-        case 2: Handle_Relays_mode2(); break;
-        case 3: Handle_Relays_mode3(); break;
-        case 4: Handle_Relays_mode4(); break;
-    }
+    if (power_off_on == 0 && MyData[POWSAVE] == 1) {
+        //power save mode, off all relays
+        RY1_off;
+        RY2_off;
+        RY3_off;
+        RY4_off;
+        RY5_off;
+        RY6_off;
+        RY7_off;
 
-    //mute OUT
-    if (mute_active || MyData[VOLUME]==64) RY7_off; else RY7_on;
+        RY9_off;
+    } else {
+        //switch operation mode, function call every 1ms
+        switch (MyData[OPMODE]) {
+            case 1:
+                Handle_Relays_mode1();
+                break;
+            case 2:
+                Handle_Relays_mode2();
+                break;
+            case 3:
+                Handle_Relays_mode3();
+                break;
+            case 4:
+                Handle_Relays_mode4();
+                break;
+        }
+
+        //mute OUT
+        if (mute_active || MyData[VOLUME] == 64) RY7_off; else RY7_on;
+
+        //input ch switch OUT
+        if (MyData[INPUTCH] == 1) RY9_off; else RY9_on;
+    }
 
     //power off/on OUT
     if (power_off_on == 0) RY8_off; else RY8_on;
 
-    //input ch switch OUT
-    if (MyData[INPUTCH] == 1) RY9_off; else RY9_on;
 }
 
 //----------------------------------------
@@ -411,8 +435,6 @@ int main(void) {
     USART3_init();
     TIM2_Setup_ENC();
     TIM1_Setup_TBASE();
-    SysTick_Config(72000); //1ms
-
     ssd1306_Init();
 
     ssd1306_Fill(0);
@@ -430,6 +452,9 @@ int main(void) {
     TIM2->ARR = ENC_IMPS_PER_STEP = MyData[IMPSSTEP];
     ENC_IMPS_PER_STEP_HALF = ENC_IMPS_PER_STEP / 2; //init
     TIM2->SMCR = MyData[QEIMODE];
+
+    //sve je spremno, startuj glavni tajmer
+    SysTick_Config(72000); //1ms
 
     //---------------------
     //endless loop!
@@ -460,7 +485,8 @@ int main(void) {
 
             //probudi ekran
             screen_saver_active = false;
-            SW_timers[5] = 0;
+            SW_timers[T_SSAVER] = 0;
+            SW_timers[T_RY] = 0; //take care!
 
             //decode IR cmd
             if (NEC1.repeat && !mute_active && power_off_on == 1) {
@@ -647,7 +673,7 @@ int main(void) {
         // Button -------------------------------------
         //---------------------------------------------
         //Button kratak klick 10-500ms
-        if (SW_timers[T_BUTTON] > 50 && SW_timers[T_BUTTON] < 500 && SW_timers_enable[0] == 0 && power_off_on == 1) {
+        if (SW_timers[T_BUTTON] > 25 && SW_timers[T_BUTTON] < 500 && SW_timers_enable[0] == 0 && power_off_on == 1) {
             if (menu_active) {
                 switch (MyData[MENU]) {
                     case 0:
@@ -668,21 +694,22 @@ int main(void) {
                     case 12:
                     case 13:
                     case 14:
+                    case 15:
                         edit_active = !edit_active; //edit mode
                         break;
 
-                    case 15: //reset settings
+                    case 16: //reset settings
                         save_change_flag = 1;
                         Reset_Settings();
                         break;
 
-                    case 18: //power off
+                    case 19: //power off
                         power_off_on = 0;
                         menu_active = 0;
                         MyData[MENU] = 0;
                         break;
 
-                    case 19: //save settings
+                    case 20: //save settings
                         menu_active = 0; //izlazimo iz menu
                         MyData[MENU] = 0;
                         if (save_change_flag) Save_Settings();
