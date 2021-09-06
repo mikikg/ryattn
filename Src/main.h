@@ -24,6 +24,7 @@
 
 #define RY8_on GPIOC->BSRR=GPIO_BSRR_BS14 //power off/on
 #define RY9_on GPIOC->BSRR=GPIO_BSRR_BS15 //ch sw
+#define PC13_on GPIOC->BSRR=GPIO_BSRR_BS13 //PC13 LED
 
 #define RY1_off GPIOA->BSRR=GPIO_BSRR_BR3
 #define RY2_off GPIOA->BSRR=GPIO_BSRR_BR4
@@ -38,7 +39,7 @@
 
 #define IR_PIN (GPIOB->IDR & GPIO_IDR_IDR3) //IR
 #define Button (GPIOA->IDR & GPIO_IDR_IDR2) //Button
-
+#define PC13_off GPIOC->BSRR=GPIO_BSRR_BR13 //PC13 LED
 
 /* --- PRINTF_BYTE_TO_BINARY macro's --- */
 #define PRINTF_BINARY_PATTERN_INT8 "%c%c%c%c%c%c%c%c"
@@ -126,7 +127,6 @@ void GPIO_init(void) {
 
  IR Input (EXTI3)
     PB3
-
      */
 
     //--------------- PA3 - Relay 1 -------------

@@ -1,6 +1,6 @@
 /*
 
-USART3 kontrolne funkcije za KBD+LCD
+USART3 kontrolne funkcije
 
 Koriste se pinovi:
 PB10 = USART TX - output

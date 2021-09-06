@@ -149,8 +149,8 @@ void TIM2_Setup_ENC (void) {
 void TIM2_IRQHandler (void){
 
 	if (TIM2->SR & TIM_SR_UIF) {//update interupt
+        TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
 		if (TIM2->CR1 & TIM_CR1_DIR) {//koji je smer
-            TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
             if (menu_active) {
                 if (!edit_active) {
                     if (MyData[MENU] > 0) MyData[MENU] --;
@@ -165,12 +165,11 @@ void TIM2_IRQHandler (void){
                     MyData[VOLUME] --;
                     save_change_flag = 1;
                     vol_change_flag = 1;
-                    SW_timers[7]=0;
+                    SW_timers[T_RY]=0;
                     current_seq_position = update_seq_up_down ? 0 : seq_position_max;
                 }
             }
 		} else {
-            TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
             if (menu_active) {
                 if (!edit_active) {
                     if (MyData[MENU] < max_menu) MyData[MENU] ++;
@@ -185,7 +184,7 @@ void TIM2_IRQHandler (void){
                     MyData[VOLUME] ++;
                     save_change_flag = 1;
                     vol_change_flag = 1;
-                    SW_timers[7]=0;
+                    SW_timers[T_RY]=0;
                     current_seq_position = update_seq_up_down ? 0 : seq_position_max;
                 }
             }

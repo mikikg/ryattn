@@ -104,7 +104,6 @@ bool flag_edge_power;
 
 //---------------------------------------------------------------------------
 
-
 //handler koji resetuje IR strukturu kada istekne count (~650ms)
 void TIM1_UP_IRQHandler(void) {
     if (TIM1->SR & TIM_SR_UIF) {
@@ -277,7 +276,7 @@ const struct {
         {"STB-PowerSave",       1},//17
         {"*ResetSettings!",     0},//18
         {"*forum.yu3ma.net",    0},//19
-        {"*FW 0.9.9 09-2021",   0},//20
+        {"*FW v1.0 09-2021",   0},//20
         {"*Power OFF",          0},//21
         {"*Save & Exit",        0},//22
 };
@@ -376,6 +375,9 @@ void Handle_Relays_mode4() {
 // Konfiguracija (72000) za SysTick da radi kao 1kHz (1ms) timer
 // Iskoriscen SysTick HW tajmer za jos X SW tajmera + Handle_relays()
 void SysTick_Handler (void) {
+
+    PC13_on; //for timing test
+
     if (SW_timers_enable[T_BUTTON] == 1) SW_timers[T_BUTTON] ++;
     SW_timers[T_EDIT_BLINK] ++;
     SW_timers[T_EDIT_OFF] ++;
@@ -423,6 +425,7 @@ void SysTick_Handler (void) {
     //power off/on OUT
     if (power_off_on == 0) RY8_off; else RY8_on;
 
+    PC13_off;
 }
 
 //----------------------------------------
@@ -435,8 +438,8 @@ int main(void) {
     USART3_init();
     TIM2_Setup_ENC();
     TIM1_Setup_TBASE();
-    ssd1306_Init();
 
+    ssd1306_Init();
     ssd1306_Fill(0);
     ssd1306_UpdateScreen();
     //ssd1306_TestFonts();
@@ -448,11 +451,6 @@ int main(void) {
     Flash_Read_MyData();
     Update_Encoder_Settings();
 
-    //restore back TMR2 settings
-    TIM2->ARR = ENC_IMPS_PER_STEP = MyData[IMPSSTEP];
-    ENC_IMPS_PER_STEP_HALF = ENC_IMPS_PER_STEP / 2; //init
-    TIM2->SMCR = MyData[QEIMODE];
-
     //sve je spremno, startuj glavni tajmer
     SysTick_Config(72000); //1ms
 
@@ -460,6 +458,7 @@ int main(void) {
     //endless loop!
     while (1) {
         last_IR_cmd = NEC1.cmd;
+
         fps++;
         if (SW_timers[T_FPS] >= 1000) {
             SW_timers[T_FPS] = 0;
@@ -629,7 +628,6 @@ int main(void) {
                 //ssd1306_WriteString(buffer, Font_11x18, White); //11px font
                 ssd1306_WriteString(buffer, Font_16x26, White); //16px font
 
-
                 if (last_IR_cmd != 0 && MyData[DEBUG] == 1) {
                     //print received IR cmd
                     sprintf(buffer, "IR=%d", last_IR_cmd); //
@@ -644,10 +642,10 @@ int main(void) {
                 //debug ----------------
                 if (MyData[DEBUG] == 1) {
                     //FPS
-                    //sprintf(buffer, "VOL=%01B" PRINTF_BINARY_PATTERN_INT8,                            PRINTF_BYTE_TO_BINARY_INT8(MyData[VOLUME])); //
-                    //sprintf(buffer, "FPS=%d", fps_last); //
-                    //ssd1306_SetCursor(7, 10);
-                    //ssd1306_WriteString(buffer, Font_7x10, White); //7px font
+                    sprintf(buffer, "VOL=%01B" PRINTF_BINARY_PATTERN_INT8,                            PRINTF_BYTE_TO_BINARY_INT8(MyData[VOLUME])); //
+                    sprintf(buffer, "FPS=%d", fps_last); //
+                    ssd1306_SetCursor(70, 10);
+                    ssd1306_WriteString(buffer, Font_7x10, White); //7px font
 
                     sprintf(buffer, "R17[%d %d %d %d %d %d %d]",
                             (_Bool) (GPIOA->IDR & GPIO_IDR_IDR3),
@@ -733,20 +731,19 @@ int main(void) {
 
         if (power_off_on == 1) {
             //Button dugacak klick > 1000ms aktivira menu | na glavnom ekranu
-            if (SW_timers[T_BUTTON] >= 1000 && !menu_active) {
-                menu_active = 1;
-                SW_timers[T_BUTTON] = 0;
-                SW_timers_enable[T_BUTTON] = 0;
-            }
-            //Button dugacak klick > 1000ms aktivira edit | u edit ekatu
-            if (SW_timers[T_BUTTON] >= 1000 && menu_active) {
-                edit_active = 1;
+            if (SW_timers[T_BUTTON] >= 1000) {
+                if (!menu_active) menu_active = 1;
                 SW_timers[T_BUTTON] = 0;
                 SW_timers_enable[T_BUTTON] = 0;
             }
         } else {
             SW_timers_enable[T_BUTTON] = 0;
-            SW_timers_enable [T_WAKEUP] = Button ? 1 : 0;
+            if (Button) { //handle wakeup
+                SW_timers_enable [T_WAKEUP] = 1;
+            } else {
+                SW_timers_enable [T_WAKEUP] = 0;
+                SW_timers [T_WAKEUP] = 0;
+            }
         }
 
         //wakeup after 1 sec button on
