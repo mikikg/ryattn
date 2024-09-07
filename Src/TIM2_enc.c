@@ -13,47 +13,36 @@
 
 #define Button GPIOA->IDR & GPIO_IDR_IDR2
 
-volatile uint16_t MyData[32];
-volatile uint16_t MyDataLimHI[32] = {
-        0, //
-        0,  //
-        4,  // OPmode
-        500, // DELAY
-        1, // DEBUG
-        3, // QEIMODE
-        2000, // IMPSSTEP
-        1, // ENABLEIR
-        8, // THEME
-        5*60, // SSAVER
-        255, // IR-volUP
-        255, // IR-volDOWN
-        255, // IR-Mute
-        255, // IR-CHSW
-        255, // IR-Power
-        2,   // Input CH
-        1,   // RY Power save
-};
-volatile uint16_t MyDataLimLO[32] = {
-        0, //
-        0,  //
-        1,  // OPmode
-        0, // DELAY
-        0, // SLOPE
-        2, // QEIMODE
-        1, // IMPSSTEP
-        0, // ENABLEIR
-        0, // THEME
-        0, // SSAVER
-        1, // IR-volUP
-        1, // IR-volDOWN
-        1, // IR-Mute
-        1, // IR-CHSW
-        1, // IR-Power
-        1, // Input CH
-        0, // RY Power save
+typedef struct {
+    uint16_t low;
+    uint16_t high;
+} DataLimits;
+
+volatile DataLimits MyDataLimits[32] = {
+        {0, 0},     // Unused
+        {0, 0},     // Unused
+        {1, 4},     // OPmode
+        {0, 500},   // DELAY
+        {0, 1},     // DEBUG
+        {2, 3},     // QEIMODE
+        {1, 2000},  // IMPSSTEP
+        {0, 1},     // ENABLEIR
+        {0, 8},     // THEME
+        {0, 5*60},  // SSAVER
+        {1, 255},   // IR-volUP
+        {1, 255},   // IR-volDOWN
+        {1, 255},   // IR-Mute
+        {1, 255},   // IR-CHSW
+        {1, 255},   // IR-Power
+        {1, 2},     // Input CH
+        {0, 1},     // RY Power save
+        {0, 9},     // CH1 name
+        {0, 9},     // CH2 name
 };
 
-#define max_menu 20
+volatile uint16_t MyData[32];
+
+#define max_menu 22
 
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;
@@ -148,51 +137,51 @@ void TIM2_Setup_ENC (void) {
 //---------- TIM2 IRQ za enkoder -----------------
 void TIM2_IRQHandler (void){
 
-	if (TIM2->SR & TIM_SR_UIF) {//update interupt
-        TIM2->CNT = ENC_IMPS_PER_STEP_HALF; //put on half for hysteresis
-		if (TIM2->CR1 & TIM_CR1_DIR) {//koji je smer
+    if (TIM2->SR & TIM_SR_UIF) {  // Update interrupt
+        TIM2->CNT = ENC_IMPS_PER_STEP_HALF; // Put on half for hysteresis
+        if (TIM2->CR1 & TIM_CR1_DIR) {  // Koji je smer (direction)
             if (menu_active) {
                 if (!edit_active) {
-                    if (MyData[MENU] > 0) MyData[MENU] --;
+                    if (MyData[MENU] > 0) MyData[MENU]--;  // Pomeri unazad u meniju
                 } else {
-                    if (MyData[SELMENU] < MyDataLimHI[SELMENU]) {
-                        MyData[SELMENU]++; //increment data
+                    if (MyData[SELMENU] < MyDataLimits[SELMENU].high) {
+                        MyData[SELMENU]++;  // Increment data
                         save_change_flag = 1;
                     }
                 }
             } else {
                 if (!mute_active && MyData[VOLUME] > 0) {
-                    MyData[VOLUME] --;
+                    MyData[VOLUME]--;
                     save_change_flag = 1;
                     vol_change_flag = 1;
-                    SW_timers[T_RY]=0;
+                    SW_timers[T_RY] = 0;
                     current_seq_position = update_seq_up_down ? 0 : seq_position_max;
                 }
             }
-		} else {
+        } else {
             if (menu_active) {
                 if (!edit_active) {
-                    if (MyData[MENU] < max_menu) MyData[MENU] ++;
+                    if (MyData[MENU] < max_menu) MyData[MENU]++;  // Pomeri napred u meniju
                 } else {
-                    if (MyData[SELMENU] > MyDataLimLO[SELMENU]) {
-                        MyData[SELMENU] --; //decrement data
+                    if (MyData[SELMENU] > MyDataLimits[SELMENU].low) {
+                        MyData[SELMENU]--;  // Decrement data
                         save_change_flag = 1;
                     }
                 }
             } else {
                 if (!mute_active && MyData[VOLUME] < 64) {
-                    MyData[VOLUME] ++;
+                    MyData[VOLUME]++;
                     save_change_flag = 1;
                     vol_change_flag = 1;
-                    SW_timers[T_RY]=0;
+                    SW_timers[T_RY] = 0;
                     current_seq_position = update_seq_up_down ? 0 : seq_position_max;
                 }
             }
-		}
+        }
 
-        TIM2->SR &=~ TIM_SR_UIF;//clear flag
+        TIM2->SR &= ~TIM_SR_UIF;  // Clear flag
 
-        //probudi ekran
+        // Probudi ekran
         screen_saver_active = false;
         SW_timers[5] = 0;
     }

@@ -80,7 +80,7 @@ extern SPI_HandleTypeDef SSD1306_SPI_PORT;
 
 // SSD1306 width in pixels
 #ifndef SSD1306_WIDTH
-#define SSD1306_WIDTH           128
+#define SSD1306_WIDTH           130
 #endif
 
 // some LEDs don't display anything in first two columns

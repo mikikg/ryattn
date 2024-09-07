@@ -58,12 +58,12 @@
 
 #define theme_enable_title 1
 #define theme_enable_vu 2
-#define max_menu 20
+#define max_menu 22
 
 //some vars
 volatile bool update_seq_up_down = 1;
 bool my_blink;
-bool power_off_on;
+bool power_off_on = false;
 volatile int current_seq_position = 1;
 volatile int seq_position_max = 6;
 int16_t tmp_volume, cnt;
@@ -74,7 +74,7 @@ volatile uint32_t SW_timers[8];
 volatile uint32_t SW_timers_enable[8];
 volatile bool screen_saver_active;
 
-extern volatile int16_t MyData[20];
+extern volatile int16_t MyData[max_menu];
 extern volatile bool menu_active;
 extern volatile bool edit_active;
 extern volatile bool mute_active;
@@ -82,6 +82,19 @@ extern volatile bool save_change_flag;
 extern volatile bool vol_change_flag;
 extern volatile int ENC_IMPS_PER_STEP;
 extern volatile int ENC_IMPS_PER_STEP_HALF;
+
+char* chNames[] = {
+        "CD   ", //0
+        "DAC  ", //1
+        "PHONO", //2
+        "TAPE ", //3
+        "TUNER", //4
+        "PC   ", //5
+        "LINE ", //6
+        "RPi  ", //7
+        "TV   ", //8
+        "AUX  ", //9
+};
 
 struct NEC {
     uint8_t addr;
@@ -127,72 +140,73 @@ void TIM1_UP_IRQHandler(void) {
     }
 }
 
-
 //EXTI IRQ handler za IR_PIN na obe ivice
-void EXTI3_IRQHandler(void ) {
-    if (EXTI->PR & EXTI_PR_PR3) { //jel pending od kanala 3?
-        EXTI->PR |= EXTI_PR_PR3; //flag se cisti tako sto se upise 1
+void EXTI3_IRQHandler(void) {
+    if (EXTI->PR & EXTI_PR_PR3) { // Jel pending od kanala 3?
+        EXTI->PR |= EXTI_PR_PR3; // Flag se čisti tako što se upiše 1
 
         if (MyData[ENABLEIR] != 0) {
             NEC1.count = TIM1->CNT;
             TIM1->CNT = 0;
             NEC1.gpio = IR_PIN ? 1 : 0;
 
-            if (NEC1.gpio && NEC1.count > 850 && NEC1.count < 1000) {
-                NEC1.init_seq = 1;
-                NEC1.complet = 0;
-            }
+            // Optimizacija pomoću switch-case umesto više if uslova
+            switch (NEC1.gpio) {
+                case 1: // Rising edge (GPIO high)
+                    switch (NEC1.count) {
+                        case 850 ... 999: // Interval 850-999 (Initial sequence)
+                            NEC1.init_seq = 1;
+                            NEC1.complet = 0;
+                            break;
+                        case 40 ... 69: // Interval 40-69 (Bit shift increment)
+                            NEC1.i++;
+                            break;
+                        default:
+                            // No relevant actions for other count values
+                            break;
+                    }
+                    break;
 
-            if (!NEC1.gpio && NEC1.count > 420 && NEC1.count < 480 && NEC1.init_seq) {
-                NEC1.i = -1;
-                NEC1.repeat = 0;
-                NEC1.init_seq = 0;
-            }
-
-            if (!NEC1.gpio && NEC1.count > 200 && NEC1.count < 260 && NEC1.init_seq) {
-                NEC1.i = -1;
-                NEC1.init_seq = 0;
-                NEC1.repeat++;
-                NEC1.complet = 1;
-            }
-
-            if (NEC1.gpio && NEC1.count > 40 && NEC1.count < 70) {
-                NEC1.i++;
-            }
-
-            if (!NEC1.gpio && NEC1.count > 40 && NEC1.count < 180) {
-                switch (NEC1.i / 8) {
-                    case 0:
-                        if (NEC1.count > 100) {
-                            NEC1.addr |= (1 << (NEC1.i % 8));
-                        } else {
-                            NEC1.addr &= ~(1 << (NEC1.i % 8));
-                        }
-                        break;
-                    case 1:
-                        if (NEC1.count > 100) {
-                            NEC1.addr_inv |= (1 << (NEC1.i % 8));
-                        } else {
-                            NEC1.addr_inv &= ~(1 << (NEC1.i % 8));
-                        }
-                        break;
-                    case 2:
-                        if (NEC1.count > 100) {
-                            NEC1.cmd |= (1 << (NEC1.i % 8));
-                        } else {
-                            NEC1.cmd &= ~(1 << (NEC1.i % 8));
-                        }
-                        break;
-                    case 3:
-                        if (NEC1.count > 100) {
-                            NEC1.cmd_inv |= (1 << (NEC1.i % 8));
-                        } else {
-                            NEC1.cmd_inv &= ~(1 << (NEC1.i % 8));
-                        }
-                        break;
-                    default:
-                        break;
-                }
+                case 0: // Falling edge (GPIO low)
+                    switch (NEC1.count) {
+                        case 420 ... 479: // Interval 420-479 (Repeat sequence reset)
+                            if (NEC1.init_seq) {
+                                NEC1.i = -1;
+                                NEC1.repeat = 0;
+                                NEC1.init_seq = 0;
+                            }
+                            break;
+                        case 200 ... 259: // Interval 200-259 (Repeat command)
+                            if (NEC1.init_seq) {
+                                NEC1.i = -1;
+                                NEC1.init_seq = 0;
+                                NEC1.repeat++;
+                                NEC1.complet = 1;
+                            }
+                            break;
+                        case 40 ... 179: // Interval 40-179 (Bit manipulation)
+                            switch (NEC1.i / 8) {
+                                case 0: // Address
+                                    NEC1.addr = (NEC1.count > 100) ? (NEC1.addr | (1 << (NEC1.i % 8))) : (NEC1.addr & ~(1 << (NEC1.i % 8)));
+                                    break;
+                                case 1: // Inverted address
+                                    NEC1.addr_inv = (NEC1.count > 100) ? (NEC1.addr_inv | (1 << (NEC1.i % 8))) : (NEC1.addr_inv & ~(1 << (NEC1.i % 8)));
+                                    break;
+                                case 2: // Command
+                                    NEC1.cmd = (NEC1.count > 100) ? (NEC1.cmd | (1 << (NEC1.i % 8))) : (NEC1.cmd & ~(1 << (NEC1.i % 8)));
+                                    break;
+                                case 3: // Inverted command
+                                    NEC1.cmd_inv = (NEC1.count > 100) ? (NEC1.cmd_inv | (1 << (NEC1.i % 8))) : (NEC1.cmd_inv & ~(1 << (NEC1.i % 8)));
+                                    break;
+                                default:
+                                    break;
+                            }
+                            break;
+                        default:
+                            // No relevant actions for other count values
+                            break;
+                    }
+                    break;
             }
 
             if (NEC1.i == 32) {
@@ -201,6 +215,7 @@ void EXTI3_IRQHandler(void ) {
         }
     }
 }
+
 
 void Draw_HLine (int start_x, int start_y, int width) {
     for (int x=start_x; x<width; x++) {
@@ -249,6 +264,8 @@ void Reset_Settings() {
     MyData[IRPOWER] = 95;
     MyData[INPUTCH] = 1;
     MyData[POWSAVE] = 1;
+    MyData[CH1NAME] = 0; //0=cd 1=dac 2=phono 3=tape 4=tuner
+    MyData[CH2NAME] = 1;
     Update_Encoder_Settings();
 }
 
@@ -274,11 +291,13 @@ const struct {
         {"IR-Power",            1},//15
         {"Input-CH",            1},//16
         {"STB-PowerSave",       1},//17
-        {"*ResetSettings!",     0},//18
-        {"*forum.yu3ma.net",    0},//19
-        {"*FW v1.0 09-2021",   0},//20
-        {"*Power OFF",          0},//21
-        {"*Save & Exit",        0},//22
+        {"CH1-Name",            1},//18
+        {"CH2-Name",            1},//19
+        {"*ResetSettings!",     0},//20
+        {"*forum.yu3ma.net",    0},//21
+        {"*FW v1.4 09-2024",    0},//22
+        {"*Power OFF",          0},//23
+        {"*Save & Exit",        0},//24
 };
 
 //--------------------------------------------------------
@@ -376,7 +395,7 @@ void Handle_Relays_mode4() {
 // Iskoriscen SysTick HW tajmer za jos X SW tajmera + Handle_relays()
 void SysTick_Handler (void) {
 
-    PC13_on; //for timing test
+    //PC13_on; //for timing test
 
     if (SW_timers_enable[T_BUTTON] == 1) SW_timers[T_BUTTON] ++;
     SW_timers[T_EDIT_BLINK] ++;
@@ -425,7 +444,7 @@ void SysTick_Handler (void) {
     //power off/on OUT
     if (power_off_on == 0) RY8_off; else RY8_on;
 
-    PC13_off;
+    //PC13_off;
 }
 
 //----------------------------------------
@@ -571,7 +590,12 @@ int main(void) {
                         if (FullMenu[i + 2 + offset].editable == 0) {//
                             sprintf(buffer, "%s", FullMenu[i + 2 + offset].text); //
                         } else {
-                            sprintf(buffer, "%s=%d", FullMenu[i + 2 + offset].text, MyData[i + 1 + offset]); //
+                            int ii = i + offset;
+                            if (ii == 16 || ii==17) { //za ch1/2 ime specificno
+                                sprintf(buffer, "%s=%s", FullMenu[i + 2 + offset].text,  chNames[MyData[i + 1 + offset]]); //
+                            } else {
+                                sprintf(buffer, "%s=%d", FullMenu[i + 2 + offset].text, MyData[i + 1 + offset]); //
+                            }
                         }
                         ssd1306_SetCursor(7, 18 + i * 10);
                         ssd1306_WriteString(buffer, Font_7x10, White);
@@ -612,12 +636,14 @@ int main(void) {
                 //Main screen with Volume
                 if ((MyData[THEME] & theme_enable_title) != 0) {
                     ssd1306_WriteString(FullMenu[1].text, Font_7x10, White);
-                    ssd1306_WriteString(MyData[INPUTCH] == 2 ? "CH2" : "CH1", Font_7x10, White);
+                    //ssd1306_WriteString(MyData[INPUTCH] == 2 ? "CH2" : "CH1", Font_7x10, White);
+
+                    ssd1306_WriteString(MyData[INPUTCH] == 2 ? chNames[MyData[CH2NAME]] : chNames[MyData[CH1NAME]], Font_7x10, White);
                 }
 
                 if (MyData[VOLUME] == 64) {
                     sprintf(buffer, "MUTE"); //
-                    ssd1306_SetCursor(30, 20);
+                    ssd1306_SetCursor(35, 20);
                 } else {
                     sprintf(buffer, " %s%ddB", MyData[VOLUME] == 0 ? "" : "-", MyData[VOLUME]); //
                     //sprintf(buffer, " %d", TIM1->CNT); //
@@ -642,7 +668,8 @@ int main(void) {
                 //debug ----------------
                 if (MyData[DEBUG] == 1) {
                     //FPS
-                    sprintf(buffer, "VOL=%01B" PRINTF_BINARY_PATTERN_INT8,                            PRINTF_BYTE_TO_BINARY_INT8(MyData[VOLUME])); //
+                    sprintf(buffer, "VOL=%01B" PRINTF_BINARY_PATTERN_INT8,
+                            PRINTF_BYTE_TO_BINARY_INT8(MyData[VOLUME])); //
                     sprintf(buffer, "FPS=%d", fps_last); //
                     ssd1306_SetCursor(70, 10);
                     ssd1306_WriteString(buffer, Font_7x10, White); //7px font
@@ -671,43 +698,29 @@ int main(void) {
         // Button -------------------------------------
         //---------------------------------------------
         //Button kratak klick 10-500ms
-        if (SW_timers[T_BUTTON] > 25 && SW_timers[T_BUTTON] < 500 && SW_timers_enable[0] == 0 && power_off_on == 1) {
+        if (SW_timers[T_BUTTON] > 15 && SW_timers[T_BUTTON] < 500 && SW_timers_enable[0] == 0 && power_off_on == 1) {
             if (menu_active) {
                 switch (MyData[MENU]) {
                     case 0:
                         menu_active = 0; //izlazimo iz menu
                         break;
 
-                    case 1:
-                    case 2:
-                    case 3:
-                    case 4:
-                    case 5:
-                    case 6:
-                    case 7:
-                    case 8:
-                    case 9:
-                    case 10:
-                    case 11:
-                    case 12:
-                    case 13:
-                    case 14:
-                    case 15:
+                    case 1 ... 17:
                         edit_active = !edit_active; //edit mode
                         break;
 
-                    case 16: //reset settings
+                    case 18: //reset settings
                         save_change_flag = 1;
                         Reset_Settings();
                         break;
 
-                    case 19: //power off
+                    case 21: //power off
                         power_off_on = 0;
                         menu_active = 0;
                         MyData[MENU] = 0;
                         break;
 
-                    case 20: //save settings
+                    case 22: //save settings
                         menu_active = 0; //izlazimo iz menu
                         MyData[MENU] = 0;
                         if (save_change_flag) Save_Settings();
