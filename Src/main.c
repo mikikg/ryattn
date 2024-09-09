@@ -1,7 +1,7 @@
 /*
-
- Relay-attenuator
+ Relay-attenuator V1.4
  Created by miki on 23/04/2021.
+ Updated on 07/09/2024.
 
  SPI2 (OLED display):
     PB12 CS - OUT
@@ -40,12 +40,12 @@
 
  IR Input (EXTI3)
     PB3
-
  */
 
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include "main.h"
 #include "ssd1306.h"
 #include "TIM2_enc.h"
@@ -58,7 +58,7 @@
 
 #define theme_enable_title 1
 #define theme_enable_vu 2
-#define max_menu 22
+#define max_menu 23
 
 //some vars
 volatile bool update_seq_up_down = 1;
@@ -73,6 +73,7 @@ char buffer[32];
 volatile uint32_t SW_timers[8];
 volatile uint32_t SW_timers_enable[8];
 volatile bool screen_saver_active;
+volatile bool screen_off_active;
 
 extern volatile int16_t MyData[max_menu];
 extern volatile bool menu_active;
@@ -82,6 +83,9 @@ extern volatile bool save_change_flag;
 extern volatile bool vol_change_flag;
 extern volatile int ENC_IMPS_PER_STEP;
 extern volatile int ENC_IMPS_PER_STEP_HALF;
+
+extern volatile bool is_screen_sleeping;  // Praćenje da li je ekran u sleep modu
+
 
 char* chNames[] = {
         "CD   ", //0
@@ -122,17 +126,7 @@ void TIM1_UP_IRQHandler(void) {
     if (TIM1->SR & TIM_SR_UIF) {
         TIM1->SR &=~ TIM_SR_UIF;//clear flag
         if (MyData[ENABLEIR] != 0){
-            NEC1.addr = 0;
-            NEC1.addr_inv = 0;
-            NEC1.cmd = 0;
-            NEC1.cmd_inv = 0;
-            NEC1.complet = 0;
-            NEC1.gpio = 0;
-            NEC1.i = 0;
-            NEC1.init_seq = 0;
-            NEC1.repeat = 0;
-            NEC1.complet = 0;
-
+            memset(&NEC1, 0, sizeof(NEC1));  // Resetuje celu strukturu na 0
             flag_edge_mute = 0;
             flag_edge_chsw = 0;
             flag_edge_power = 0;
@@ -216,7 +210,6 @@ void EXTI3_IRQHandler(void) {
     }
 }
 
-
 void Draw_HLine (int start_x, int start_y, int width) {
     for (int x=start_x; x<width; x++) {
         ssd1306_DrawPixel(x, start_y, 1);
@@ -266,6 +259,7 @@ void Reset_Settings() {
     MyData[POWSAVE] = 1;
     MyData[CH1NAME] = 0; //0=cd 1=dac 2=phono 3=tape 4=tuner
     MyData[CH2NAME] = 1;
+    MyData[DOFFMIN] = 0;
     Update_Encoder_Settings();
 }
 
@@ -293,6 +287,7 @@ const struct {
         {"STB-PowerSave",       1},//17
         {"CH1-Name",            1},//18
         {"CH2-Name",            1},//19
+        {"DispOfMin",            1},//19
         {"*ResetSettings!",     0},//20
         {"*forum.yu3ma.net",    0},//21
         {"*FW v1.4 09-2024",    0},//22
@@ -401,7 +396,7 @@ void SysTick_Handler (void) {
     SW_timers[T_EDIT_BLINK] ++;
     SW_timers[T_EDIT_OFF] ++;
     if (SW_timers_enable[T_WAKEUP] == 1) SW_timers[T_WAKEUP] ++;
-    SW_timers[T_UN_4] ++;
+    SW_timers[T_DISPOFF] ++;
     SW_timers[T_SSAVER] ++;
     SW_timers[T_FPS] ++;
     SW_timers[T_RY] ++;
@@ -503,7 +498,9 @@ int main(void) {
 
             //probudi ekran
             screen_saver_active = false;
+            screen_off_active = false;
             SW_timers[T_SSAVER] = 0;
+            SW_timers[T_DISPOFF] = 0;
             SW_timers[T_RY] = 0; //take care!
 
             //decode IR cmd
@@ -565,7 +562,24 @@ int main(void) {
             screen_saver_active = 0;
         }
 
-        if (screen_saver_active && power_off_on == 1) {
+        if (MyData[DOFFMIN] != 0) { //Display off
+            if (SW_timers[T_DISPOFF] > MyData[DOFFMIN]*  1000 * 60 && !screen_off_active) {
+                //Display OFF activated
+                SW_timers[T_DISPOFF] = 0;
+                if (is_screen_sleeping == false) {
+                    ssd1306_Fill(Black);
+                    ssd1306_UpdateScreen(); //need to get last crc32
+                    screen_off_active = true;
+                    is_screen_sleeping = true;  // Obeleži da je ekran sada u sleep režimu
+                    ssd1306_WriteCommand(0xAE);  // Display OFF (sleep mode)
+                }
+            }
+        } else if (MyData[DOFFMIN] == 0){
+            screen_off_active = 0;
+            is_screen_sleeping = false;
+        }
+
+        if (screen_saver_active && power_off_on == 1 && screen_off_active == 0) {
             //screen saver .. . . . . ..
             ssd1306_DrawPixel((rand() & 127), (rand() & 63), (cnt++ % 500 == 0) ? 1 : 0);
         } else {
@@ -578,66 +592,66 @@ int main(void) {
                 goto skeep_update_src;
             }
 
-            if (menu_active) {
-                //Settings menu
-                sprintf(buffer, "%s %d", FullMenu[0].text, MyData[MENU]); //
-                ssd1306_WriteString(buffer, Font_11x18, White); //11px font
+            if (screen_off_active == 1) {
+                goto no_draw;
+            }
 
-                //draw menu items
-                if (MyData[MENU] > 3) { //4 - X vertical menu scroll
+            if (menu_active) {
+                // Settings menu
+                sprintf(buffer, "%s %d", FullMenu[0].text, MyData[MENU]); // Naziv menija i trenutna pozicija
+                ssd1306_WriteString(buffer, Font_11x18, White); // 11px font
+
+                // Draw menu items
+                if (MyData[MENU] > 3) { // Kada se dešava vertikalni skrol (MENU > 3)
                     int offset = MyData[MENU] - 3;
-                    for (int i = 0; i < 4; ++i) {
-                        if (FullMenu[i + 2 + offset].editable == 0) {//
-                            sprintf(buffer, "%s", FullMenu[i + 2 + offset].text); //
+                    for (int i = 0; i < 4; ++i) { // Prikazuje samo 4 stavke
+                        int menu_index = i + 2 + offset; // Prilagođavanje indeksa menija
+                        if (!FullMenu[menu_index].editable) {
+                            strncpy(buffer, FullMenu[menu_index].text, sizeof(buffer) - 1); // Kopiraj tekst stavke
                         } else {
-                            int ii = i + offset;
-                            if (ii == 16 || ii==17) { //za ch1/2 ime specificno
-                                sprintf(buffer, "%s=%s", FullMenu[i + 2 + offset].text,  chNames[MyData[i + 1 + offset]]); //
+                            if (i + offset == 16 || i + offset == 17) { // Za specifična imena kanala
+                                sprintf(buffer, "%s=%s", FullMenu[menu_index].text, chNames[MyData[i + offset + 1]]);
                             } else {
-                                sprintf(buffer, "%s=%d", FullMenu[i + 2 + offset].text, MyData[i + 1 + offset]); //
+                                sprintf(buffer, "%s=%d", FullMenu[menu_index].text, MyData[i + offset + 1]);
                             }
                         }
-                        ssd1306_SetCursor(7, 18 + i * 10);
+                        ssd1306_SetCursor(7, 18 + i * 10); // Pomeraj kursor za svaku sledeću stavku
                         ssd1306_WriteString(buffer, Font_7x10, White);
                     }
-                    //set cursor for draw fixed selection 3 ">"
-                    ssd1306_SetCursor(0, 18 + 30);
-                } else { //0 - 3 items
+                    // Postavi kursor na fiksnu poziciju za trenutnu stavku u okviru skrol menija
+                    ssd1306_SetCursor(0, 18 + 30); // Kursor je uvek na poslednjoj stavci pri skrolovanju
+                } else { // Kada nema skrolovanja (MENU <= 3)
                     for (int i = 0; i < 4; ++i) {
-                        if (FullMenu[i + 2].editable == 0) {//
-                            sprintf(buffer, "%s", FullMenu[i + 2].text); //
+                        int menu_index = i + 2;
+                        if (!FullMenu[menu_index].editable) {
+                            strncpy(buffer, FullMenu[menu_index].text, sizeof(buffer) - 1); // Kopiraj tekst stavke
                         } else {
-                            sprintf(buffer, "%s=%d", FullMenu[i + 2].text, MyData[i + 1]); //
+                            sprintf(buffer, "%s=%d", FullMenu[menu_index].text, MyData[i + 1]);
                         }
-                        ssd1306_SetCursor(7, 18 + i * 10);
+                        ssd1306_SetCursor(7, 18 + i * 10); // Pomeraj kursor za svaku sledeću stavku
                         ssd1306_WriteString(buffer, Font_7x10, White);
                     }
-                    //set cursor for draw selection 0-3 ">"
+                    // Postavi kursor za trenutnu stavku (0-3) u okviru menija
                     ssd1306_SetCursor(0, 18 + MyData[MENU] * 10);
                 }
 
-                if (SW_timers[T_EDIT_BLINK] > 200) {//200ms edit blink
+                // Blink logika za edit mod
+                if (SW_timers[T_EDIT_BLINK] > 200) {
                     my_blink = !my_blink;
                     SW_timers[T_EDIT_BLINK] = 0;
                 }
+
                 if (edit_active) {
-                    ssd1306_WriteString(my_blink ? ">" : "", Font_7x10, White); //with blink
-
-                    //auto turn off edit mode after 4 seconds (spare one click!)
-                    //if (SW_timers[T_EDIT_OFF] > 4000 && my_blink) {
-                    // edit_active = 0;
-                    // SW_timers[T_EDIT_OFF] = 0;
-                    //}
+                    ssd1306_WriteString(my_blink ? ">" : "", Font_7x10, White); // Blink sa trepćućim ">"
                 } else {
-                    ssd1306_WriteString(">", Font_7x10, White);
+                    ssd1306_WriteString(">", Font_7x10, White); // Staticki ">"
                 }
+            }
 
-            } else {
+            else {
                 //Main screen with Volume
                 if ((MyData[THEME] & theme_enable_title) != 0) {
                     ssd1306_WriteString(FullMenu[1].text, Font_7x10, White);
-                    //ssd1306_WriteString(MyData[INPUTCH] == 2 ? "CH2" : "CH1", Font_7x10, White);
-
                     ssd1306_WriteString(MyData[INPUTCH] == 2 ? chNames[MyData[CH2NAME]] : chNames[MyData[CH1NAME]], Font_7x10, White);
                 }
 
@@ -646,12 +660,9 @@ int main(void) {
                     ssd1306_SetCursor(35, 20);
                 } else {
                     sprintf(buffer, " %s%ddB", MyData[VOLUME] == 0 ? "" : "-", MyData[VOLUME]); //
-                    //sprintf(buffer, " %d", TIM1->CNT); //
                     ssd1306_SetCursor(MyData[VOLUME] == 0 ? 21 : 5, 20);
                 }
 
-                //ssd1306_WriteString(buffer, Font_7x10, White); //7px font
-                //ssd1306_WriteString(buffer, Font_11x18, White); //11px font
                 ssd1306_WriteString(buffer, Font_16x26, White); //16px font
 
                 if (last_IR_cmd != 0 && MyData[DEBUG] == 1) {
@@ -694,6 +705,9 @@ int main(void) {
             }
         }
 
+        //label, jumped if display OFF activated
+        no_draw:
+
         //---------------------------------------------
         // Button -------------------------------------
         //---------------------------------------------
@@ -705,22 +719,22 @@ int main(void) {
                         menu_active = 0; //izlazimo iz menu
                         break;
 
-                    case 1 ... 17:
+                    case 1 ... 18:
                         edit_active = !edit_active; //edit mode
                         break;
 
-                    case 18: //reset settings
+                    case 19: //reset settings
                         save_change_flag = 1;
                         Reset_Settings();
                         break;
 
-                    case 21: //power off
+                    case 22: //power off
                         power_off_on = 0;
                         menu_active = 0;
                         MyData[MENU] = 0;
                         break;
 
-                    case 22: //save settings
+                    case 23: //save settings
                         menu_active = 0; //izlazimo iz menu
                         MyData[MENU] = 0;
                         if (save_change_flag) Save_Settings();

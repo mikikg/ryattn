@@ -11,6 +11,7 @@
 
 */
 
+#include <stdbool.h>
 #include "ssd1306.h"
 #include "stm32f1xx.h"
 
@@ -67,6 +68,39 @@ void ssd1306_WriteData(uint8_t* buffer, size_t buff_size) {
 #else
 //#error "You should define SSD1306_USE_SPI or SSD1306_USE_I2C macro"
 #endif
+
+volatile bool is_screen_sleeping = false;  // Praćenje da li je ekran u sleep modu
+
+//------------------crc32------------------------
+// Define the base address of the CRC module
+#define CRC_BASE_ADDR (0x40023000UL)  // Base address for the CRC peripheral module (STM32F1)
+
+// Register definitions (low-level access)
+#define CRC_DR     (*(volatile uint32_t *)(CRC_BASE_ADDR + 0x00))  // Data Register (DR)
+#define CRC_IDR    (*(volatile uint32_t *)(CRC_BASE_ADDR + 0x04))  // Independent Data Register (IDR)
+#define CRC_CR     (*(volatile uint32_t *)(CRC_BASE_ADDR + 0x08))  // Control Register (CR)
+
+static uint8_t SSD1306_Buffer[SSD1306_WIDTH * SSD1306_HEIGHT / 8];
+static uint32_t previous_buffer_crc = 0;
+
+// Function to initialize the CRC hardware
+void CRC_Init(void) {
+    // Enable clock for the CRC module
+    RCC->AHBENR |= RCC_AHBENR_CRCEN;  // Enable CRC clock
+    // Reset the CRC module
+    CRC_CR |= 1U;  // Set the RESET bit in CRC_CR to reset the CRC unit
+}
+
+// Function to calculate the CRC for the screen buffer
+uint32_t calculate_crc32_hardware(const uint8_t *data, size_t length) {
+    CRC_CR |= 1U;  // Set the RESET bit to reset the CRC accumulator
+    // Add data to the CRC register, processing 32-bit words
+    for (size_t i = 0; i < length; i += 4) {
+        CRC_DR = *((uint32_t*)(data + i));;  // Write data to the CRC Data Register
+    }
+    return CRC_DR;  // Return the CRC result
+}
+//-------------
 
 void initPinsSD1306() {
 
@@ -218,6 +252,8 @@ void ssd1306_TestFonts() {
 
 void ssd1306_Init(void) {
 
+    CRC_Init(); // for screen buffer change update
+
     initPinsSD1306();
     ssd1306_Reset();
     for (int x = 0; x < 100; x++) { RES_on; }
@@ -288,15 +324,44 @@ void ssd1306_Fill(SSD1306_COLOR color) {
     }
 }
 
-// Write the screenbuffer with changed to the screen
+// Write the screenbuffer with changes to the screen only if changed by crc32
+//void ssd1306_UpdateScreen(void) {
+//    uint32_t current_crc = calculate_crc32_hardware(SSD1306_Buffer, sizeof(SSD1306_Buffer));
+//
+//    // Compare the current CRC with the previous one
+//    if (current_crc != previous_buffer_crc) {
+//        uint8_t i;
+//        for(i = 0; i < 8; i++) {
+//            ssd1306_WriteCommand(0xB0 + i);
+//            ssd1306_WriteCommand(0x00);
+//            ssd1306_WriteCommand(0x10);
+//            ssd1306_WriteData(&SSD1306_Buffer[SSD1306_WIDTH * i], SSD1306_WIDTH);
+//        }
+//        // Update the previous CRC
+//        previous_buffer_crc = current_crc;
+//    }
+//}
+
 void ssd1306_UpdateScreen(void) {
-    uint8_t i;
-    for(i = 0; i < 8; i++) {
+    uint32_t current_crc = calculate_crc32_hardware(SSD1306_Buffer, sizeof(SSD1306_Buffer));
+
+    if (current_crc == previous_buffer_crc) {
+        return;
+    }
+
+    if (is_screen_sleeping) {
+        ssd1306_WriteCommand(0xAF);  // Display ON
+        is_screen_sleeping = false;
+    }
+
+    for (uint8_t i = 0; i < 8; i++) {
         ssd1306_WriteCommand(0xB0 + i);
         ssd1306_WriteCommand(0x00);
         ssd1306_WriteCommand(0x10);
-        ssd1306_WriteData(&SSD1306_Buffer[SSD1306_WIDTH*i],SSD1306_WIDTH);
+        ssd1306_WriteData(&SSD1306_Buffer[SSD1306_WIDTH * i], SSD1306_WIDTH);
     }
+
+    previous_buffer_crc = current_crc;
 }
 
 //    Draw one pixel in the screenbuffer

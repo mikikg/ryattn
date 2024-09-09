@@ -38,11 +38,12 @@ volatile DataLimits MyDataLimits[32] = {
         {0, 1},     // RY Power save
         {0, 9},     // CH1 name
         {0, 9},     // CH2 name
+        {0, 5*60},  // DispOffMin
 };
 
 volatile uint16_t MyData[32];
 
-#define max_menu 22
+#define max_menu 23
 
 volatile bool menu_active = 0;
 volatile bool edit_active = 0;
@@ -55,6 +56,7 @@ volatile int ENC_IMPS_PER_STEP_HALF;
 extern volatile uint32_t SW_timers[8];
 extern volatile uint32_t SW_timers_enable[8];
 extern volatile bool screen_saver_active;
+extern volatile bool screen_off_active;
 extern volatile bool update_seq_up_down;
 extern volatile int current_seq_position;
 extern volatile int seq_position_max;
@@ -183,6 +185,8 @@ void TIM2_IRQHandler (void){
 
         // Probudi ekran
         screen_saver_active = false;
+        screen_off_active = false;
+        SW_timers[4] = 0;
         SW_timers[5] = 0;
     }
 }
@@ -193,10 +197,11 @@ void EXTI2_IRQHandler (void){ //button padajuca ivica ...
         SW_timers_enable[0] = Button ? 1 : 0;
         EXTI->PR |= EXTI_PR_PR2; //flag se cisti tako sto se upise 1
 
-        //probudi ekran i ugasi led
+        //probudi ekran
         screen_saver_active = false;
+        screen_off_active = false;
+        SW_timers[4] = 0;
         SW_timers[5] = 0;
-        //GPIOC->BSRR = GPIO_BSRR_BS13;
     }
 }
 

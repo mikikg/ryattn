@@ -18,8 +18,6 @@ extern volatile bool save_change_flag;
 
 void Flash_Write_MyData() {
 
-    GPIOC->BSRR = GPIO_BSRR_BR13; //LED ON
-
     //ponovo enablujemo RC jer treba za programiranje internog FLASH-a u run-time!!!
     RCC->CR |= RCC_CR_HSION;// Enable HSI (RC Osc)
     while(!(RCC->CR & (RCC_CR_HSIRDY)));   // Wait till HSI ready
@@ -85,8 +83,6 @@ void Flash_Write_MyData() {
     //LOCK ...
     FLASH->CR |= FLASH_CR_LOCK;
 
-    GPIOC->BSRR = GPIO_BSRR_BS13; //LED OFF
-
     save_change_flag = 0;
 
 }
@@ -106,9 +102,6 @@ void Flash_Read_MyData() {
     MyData[SSAVER] = 0;
      ...
      */
-
-    GPIOC->BSRR = GPIO_BSRR_BR13; //LED ON
-
     //Read only if initialized
     if (*(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * 510) == 'M'*256+'i'
             && *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * 511) == 'k'*256+'i') {
@@ -119,6 +112,4 @@ void Flash_Read_MyData() {
             MyData[a] = *(__IO uint16_t *) (ADDR_FLASH_PAGE_62 + 16 * a);       // Read data
         }
     }
-
-    GPIOC->BSRR = GPIO_BSRR_BS13; //LED OFF
 }
